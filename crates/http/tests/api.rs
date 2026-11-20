@@ -11,14 +11,14 @@ use axum::http::{Request, StatusCode, header};
 use http_body_util::BodyExt;
 use nirog_application::ports::{IdentityProvider, OfferRepository, SourceInfo, SystemClock};
 use nirog_application::sellers::DefaultSellerLinks;
-use nirog_application::services::{AuthService, CatalogService, SavedMatchService};
+use nirog_application::services::{AuthService, CatalogService, SavedMatchService, StatsService};
 use nirog_application::{Identity, IdentityError};
 use nirog_domain::parse::{describe_salts, detect_form, detect_release};
 use nirog_domain::{MatchKey, Offer, OfferId, Pack, PackUnit, Paise, Salt, SourceKind};
 use nirog_http::{AppState, HttpConfig, RateLimit, router};
 use nirog_persistence::{
     PgLoginStateRepository, PgOfferRepository, PgSavedMatchRepository, PgSessionRepository,
-    PgUserRepository,
+    PgStatsRepository, PgUserRepository,
 };
 use nirog_sources::aliases::BundledAliases;
 use serde_json::{Value, json};
@@ -134,7 +134,11 @@ async fn app_with(pool: PgPool, config: HttpConfig) -> Router {
             Arc::new(SystemClock),
             time::Duration::days(30),
         ),
-        saved: SavedMatchService::new(Arc::new(PgSavedMatchRepository::new(pool)), offers),
+        saved: SavedMatchService::new(Arc::new(PgSavedMatchRepository::new(pool.clone())), offers),
+        stats: StatsService::new(
+            Arc::new(PgStatsRepository::new(pool)),
+            Arc::new(SystemClock),
+        ),
         config: Arc::new(config),
     };
     router(state)
@@ -632,5 +636,24 @@ fn openapi_json_matches_committed_file() {
     assert!(
         committed == generated,
         "openapi.json is stale: run `UPDATE_OPENAPI=1 cargo test -p nirog-http --test api openapi`"
+    );
+}
+
+#[sqlx::test(migrator = "nirog_persistence::MIGRATOR")]
+async fn stats_sum_up_the_price_data(pool: PgPool) {
+    let app = app_with(pool, config()).await;
+    let res = send(&app, get("/v1/stats")).await;
+    assert_eq!(res.status, StatusCode::OK);
+    assert_eq!(res.header("cache-control"), "public, max-age=300");
+    // Dolo at 206.07 paise a tablet has a 100-paise Jan Aushadhi substitute: 51.47% less.
+    assert_eq!(
+        res.json,
+        json!({
+            "medicines": 2,
+            "jan_aushadhi": 1,
+            "with_cheaper_substitute": 1,
+            "median_saving_bps": 5147,
+            "prices_updated_on": "2026-11-20"
+        })
     );
 }

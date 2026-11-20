@@ -9,12 +9,12 @@ use std::time::Duration;
 use anyhow::Result;
 use nirog_application::ports::{Clock, SystemClock};
 use nirog_application::sellers::DefaultSellerLinks;
-use nirog_application::services::{AuthService, CatalogService, SavedMatchService};
+use nirog_application::services::{AuthService, CatalogService, SavedMatchService, StatsService};
 use nirog_http::AppState;
 use nirog_identity_google::{GoogleConfig, GoogleIdentityProvider, Secret};
 use nirog_persistence::{
     PgLoginStateRepository, PgOfferRepository, PgSavedMatchRepository, PgSessionRepository,
-    PgUserRepository,
+    PgStatsRepository, PgUserRepository,
 };
 use nirog_sources::aliases::BundledAliases;
 use tracing_subscriber::EnvFilter;
@@ -57,7 +57,8 @@ async fn main() -> Result<()> {
             clock.clone(),
             time::Duration::days(30),
         ),
-        saved: SavedMatchService::new(Arc::new(PgSavedMatchRepository::new(pool)), offers),
+        saved: SavedMatchService::new(Arc::new(PgSavedMatchRepository::new(pool.clone())), offers),
+        stats: StatsService::new(Arc::new(PgStatsRepository::new(pool)), clock.clone()),
         config: Arc::new(config.http.clone()),
     };
 

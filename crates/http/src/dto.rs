@@ -285,3 +285,29 @@ pub struct CallbackParams {
     pub state: Option<String>,
     pub error: Option<String>,
 }
+
+/// Headline figures about the price data, for the home screen.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct StatsResponse {
+    /// Every medicine we hold a price for.
+    pub medicines: u64,
+    pub jan_aushadhi: u64,
+    /// Medicines with an exact substitute that costs less per unit.
+    pub with_cheaper_substitute: u64,
+    /// Median saving per unit for those medicines, in basis points (5147 = 51.47%).
+    pub median_saving_bps: u32,
+    /// Date of the newest price list, YYYY-MM-DD.
+    pub prices_updated_on: Option<String>,
+}
+
+impl From<nirog_application::model::CatalogStats> for StatsResponse {
+    fn from(s: nirog_application::model::CatalogStats) -> Self {
+        Self {
+            medicines: s.medicines,
+            jan_aushadhi: s.jan_aushadhi,
+            with_cheaper_substitute: s.with_cheaper_substitute,
+            median_saving_bps: s.median_saving_bps,
+            prices_updated_on: s.prices_updated_on.map(|d| d.to_string()),
+        }
+    }
+}

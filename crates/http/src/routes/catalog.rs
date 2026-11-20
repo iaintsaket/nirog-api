@@ -6,6 +6,7 @@ use axum::response::IntoResponse;
 use crate::AppState;
 use crate::dto::{
     BrandAliasDto, CompareParams, ComparisonResponse, ErrorBody, SearchParams, SearchResponse,
+    StatsResponse,
 };
 use crate::error::ApiError;
 
@@ -39,4 +40,10 @@ pub async fn compare(
 ) -> Result<impl IntoResponse, ApiError> {
     let view = s.catalog.compare(&p.key, p.searched.as_deref()).await?;
     Ok(([CACHE], Json(ComparisonResponse::from(view))))
+}
+
+#[utoipa::path(get, path = "/v1/stats", tag = "catalog",
+    responses((status = 200, body = StatsResponse)))]
+pub async fn stats(State(s): State<AppState>) -> Result<impl IntoResponse, ApiError> {
+    Ok(([CACHE], Json(StatsResponse::from(s.stats.stats().await?))))
 }

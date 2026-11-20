@@ -125,3 +125,9 @@ pub trait PriceSource: Send + Sync {
     /// Returns parsed offers and how many input rows were skipped as unusable.
     fn load(&self) -> Result<(Vec<Offer>, usize), SourceError>;
 }
+
+/// Headline figures about the price data.
+#[async_trait]
+pub trait StatsRepository: Send + Sync {
+    async fn stats(&self) -> Result<crate::model::CatalogStats, RepoError>;
+}
