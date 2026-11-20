@@ -4,10 +4,10 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, TimeZone, Utc};
 use nirog_domain::{
     Form, MatchKey, Offer, OfferId, Pack, PackUnit, Paise, Release, Salt, SourceKind,
 };
+use time::{Duration, OffsetDateTime, macros::datetime};
 use uuid::Uuid;
 
 use crate::error::{IdentityError, RepoError};
@@ -89,13 +89,11 @@ impl OfferRepository for FakeOffers {
 }
 
 #[derive(Debug)]
-pub struct FakeClock(Mutex<DateTime<Utc>>);
+pub struct FakeClock(Mutex<OffsetDateTime>);
 
 impl Default for FakeClock {
     fn default() -> Self {
-        Self(Mutex::new(
-            Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
-        ))
+        Self(Mutex::new(datetime!(2026-01-01 0:00 UTC)))
     }
 }
 
@@ -106,7 +104,7 @@ impl FakeClock {
 }
 
 impl Clock for FakeClock {
-    fn now(&self) -> DateTime<Utc> {
+    fn now(&self) -> OffsetDateTime {
         *self.0.lock().unwrap()
     }
 }
@@ -146,8 +144,8 @@ impl IdentityProvider for FakeIdp {
 #[derive(Debug, Default)]
 pub struct InMemoryAuth {
     users: Mutex<HashMap<Uuid, (String, User)>>,
-    sessions: Mutex<HashMap<TokenHash, (UserId, DateTime<Utc>)>>,
-    states: Mutex<HashMap<TokenHash, (String, DateTime<Utc>)>>,
+    sessions: Mutex<HashMap<TokenHash, (UserId, OffsetDateTime)>>,
+    states: Mutex<HashMap<TokenHash, (String, OffsetDateTime)>>,
 }
 
 #[async_trait]
@@ -186,7 +184,7 @@ impl SessionRepository for InMemoryAuth {
         &self,
         hash: &TokenHash,
         user: UserId,
-        expires_at: DateTime<Utc>,
+        expires_at: OffsetDateTime,
     ) -> Result<(), RepoError> {
         self.sessions
             .lock()
@@ -197,7 +195,7 @@ impl SessionRepository for InMemoryAuth {
     async fn user_for(
         &self,
         hash: &TokenHash,
-        now: DateTime<Utc>,
+        now: OffsetDateTime,
     ) -> Result<Option<UserId>, RepoError> {
         Ok(self
             .sessions
@@ -219,7 +217,7 @@ impl LoginStateRepository for InMemoryAuth {
         &self,
         state: &TokenHash,
         verifier: &str,
-        expires_at: DateTime<Utc>,
+        expires_at: OffsetDateTime,
     ) -> Result<(), RepoError> {
         self.states
             .lock()
@@ -230,7 +228,7 @@ impl LoginStateRepository for InMemoryAuth {
     async fn take(
         &self,
         state: &TokenHash,
-        now: DateTime<Utc>,
+        now: OffsetDateTime,
     ) -> Result<Option<String>, RepoError> {
         Ok(self
             .states
@@ -256,7 +254,7 @@ impl FakeSaved {
                     key: key(&format!("f{i}")),
                     offer_id: None,
                     label: "x".into(),
-                    created_at: Utc::now(),
+                    created_at: OffsetDateTime::now_utc(),
                 },
             ));
         }
@@ -290,7 +288,7 @@ impl SavedMatchRepository for FakeSaved {
             key: item.key.clone(),
             offer_id: item.offer_id.clone(),
             label: item.label.clone(),
-            created_at: Utc::now(),
+            created_at: OffsetDateTime::now_utc(),
         };
         self.0.lock().unwrap().push((user, s.clone()));
         Ok(s)

@@ -22,7 +22,7 @@ async-trait = "0.1"
 axum = "0.8"
 axum-extra = { version = "0.12", features = ["cookie"] }
 base64 = "0.23"
-chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+time = { version = "0.3", features = ["serde", "formatting", "parsing", "macros"] }
 csv = "1"
 getrandom = "0.3"
 http-body-util = "0.1"
@@ -31,7 +31,7 @@ reqwest = { version = "0.13", default-features = false, features = ["json", "for
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
-sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "chrono", "migrate", "macros"] }
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "time", "migrate", "macros"] }
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }
 tower = { version = "0.5", features = ["util"] }
@@ -40,7 +40,7 @@ tower_governor = { version = "0.8", default-features = false, features = ["axum"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 url = "2"
-utoipa = { version = "6", features = ["chrono", "uuid"] }
+utoipa = { version = "6", features = ["time", "uuid"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 wiremock = "0.6"
 

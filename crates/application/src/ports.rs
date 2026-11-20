@@ -2,8 +2,8 @@
 //! in its own crate and an in-memory fake for tests.
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use nirog_domain::{MatchKey, Offer, SourceKind};
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::error::{IdentityError, RepoError};
@@ -34,12 +34,12 @@ pub trait SessionRepository: Send + Sync {
         &self,
         hash: &TokenHash,
         user: UserId,
-        expires_at: DateTime<Utc>,
+        expires_at: OffsetDateTime,
     ) -> Result<(), RepoError>;
     async fn user_for(
         &self,
         hash: &TokenHash,
-        now: DateTime<Utc>,
+        now: OffsetDateTime,
     ) -> Result<Option<UserId>, RepoError>;
     async fn delete(&self, hash: &TokenHash) -> Result<(), RepoError>;
 }
@@ -51,12 +51,12 @@ pub trait LoginStateRepository: Send + Sync {
         &self,
         state: &TokenHash,
         pkce_verifier: &str,
-        expires_at: DateTime<Utc>,
+        expires_at: OffsetDateTime,
     ) -> Result<(), RepoError>;
     async fn take(
         &self,
         state: &TokenHash,
-        now: DateTime<Utc>,
+        now: OffsetDateTime,
     ) -> Result<Option<String>, RepoError>;
 }
 
@@ -76,15 +76,15 @@ pub trait IdentityProvider: Send + Sync {
 }
 
 pub trait Clock: Send + Sync {
-    fn now(&self) -> DateTime<Utc>;
+    fn now(&self) -> OffsetDateTime;
 }
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SystemClock;
 
 impl Clock for SystemClock {
-    fn now(&self) -> DateTime<Utc> {
-        Utc::now()
+    fn now(&self) -> OffsetDateTime {
+        OffsetDateTime::now_utc()
     }
 }
 

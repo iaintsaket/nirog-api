@@ -11,7 +11,7 @@ description = "Postgres adapters (DAOs) for the application ports, plus migratio
 nirog-domain.workspace = true
 nirog-application.workspace = true
 async-trait.workspace = true
-chrono.workspace = true
+time.workspace = true
 sqlx.workspace = true
 uuid.workspace = true
 

@@ -1,9 +1,9 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use nirog_application::ports::{LoginStateRepository, SessionRepository};
 use nirog_application::security::TokenHash;
 use nirog_application::{RepoError, UserId};
 use sqlx::PgPool;
+use time::OffsetDateTime;
 
 use crate::db;
 
@@ -18,7 +18,7 @@ impl PgSessionRepository {
     }
 
     /// Housekeeping: removes expired sessions and login states. Returns rows removed.
-    pub async fn purge_expired(&self, now: DateTime<Utc>) -> Result<u64, RepoError> {
+    pub async fn purge_expired(&self, now: OffsetDateTime) -> Result<u64, RepoError> {
         let a = sqlx::query("DELETE FROM sessions WHERE expires_at <= $1")
             .bind(now)
             .execute(&self.pool)
@@ -39,7 +39,7 @@ impl SessionRepository for PgSessionRepository {
         &self,
         hash: &TokenHash,
         user: UserId,
-        expires_at: DateTime<Utc>,
+        expires_at: OffsetDateTime,
     ) -> Result<(), RepoError> {
         sqlx::query("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1, $2, $3)")
             .bind(&hash.0[..])
@@ -54,7 +54,7 @@ impl SessionRepository for PgSessionRepository {
     async fn user_for(
         &self,
         hash: &TokenHash,
-        now: DateTime<Utc>,
+        now: OffsetDateTime,
     ) -> Result<Option<UserId>, RepoError> {
         let id: Option<uuid::Uuid> = sqlx::query_scalar(
             "SELECT user_id FROM sessions WHERE token_hash = $1 AND expires_at > $2",
@@ -94,7 +94,7 @@ impl LoginStateRepository for PgLoginStateRepository {
         &self,
         state: &TokenHash,
         pkce_verifier: &str,
-        expires_at: DateTime<Utc>,
+        expires_at: OffsetDateTime,
     ) -> Result<(), RepoError> {
         sqlx::query(
             "INSERT INTO login_states (state_hash, pkce_verifier, expires_at) VALUES ($1, $2, $3)",
@@ -112,9 +112,9 @@ impl LoginStateRepository for PgLoginStateRepository {
     async fn take(
         &self,
         state: &TokenHash,
-        now: DateTime<Utc>,
+        now: OffsetDateTime,
     ) -> Result<Option<String>, RepoError> {
-        let row: Option<(String, DateTime<Utc>)> = sqlx::query_as(
+        let row: Option<(String, OffsetDateTime)> = sqlx::query_as(
             "DELETE FROM login_states WHERE state_hash = $1 RETURNING pkce_verifier, expires_at",
         )
         .bind(&state.0[..])
@@ -130,8 +130,8 @@ mod tests {
     use super::*;
     use crate::PgUserRepository;
     use crate::users::tests::identity;
-    use chrono::Duration;
     use nirog_application::ports::UserRepository;
+    use time::Duration;
 
     #[sqlx::test(migrator = "crate::MIGRATOR")]
     async fn sessions_expire_and_cascade_with_user(pool: PgPool) -> Result<(), RepoError> {
@@ -140,7 +140,7 @@ mod tests {
         let user = users
             .upsert_identity(&identity("s", "s@example.com"))
             .await?;
-        let now = Utc::now();
+        let now = OffsetDateTime::now_utc();
         let (live, old) = (TokenHash::of("live"), TokenHash::of("old"));
         repo.create(&live, user.id, now + Duration::hours(1))
             .await?;
@@ -165,7 +165,7 @@ mod tests {
     #[sqlx::test(migrator = "crate::MIGRATOR")]
     async fn login_state_is_single_use_and_expires(pool: PgPool) -> Result<(), RepoError> {
         let repo = PgLoginStateRepository::new(pool);
-        let now = Utc::now();
+        let now = OffsetDateTime::now_utc();
         let (s1, s2) = (TokenHash::of("s1"), TokenHash::of("s2"));
         repo.put(&s1, "verifier", now + Duration::minutes(10))
             .await?;

@@ -50,7 +50,7 @@ async fn main() -> Result<()> {
             Arc::new(PgLoginStateRepository::new(pool.clone())),
             Arc::new(google),
             clock.clone(),
-            chrono::Duration::days(30),
+            time::Duration::days(30),
         ),
         saved: SavedMatchService::new(Arc::new(PgSavedMatchRepository::new(pool)), offers),
         config: Arc::new(config.http.clone()),

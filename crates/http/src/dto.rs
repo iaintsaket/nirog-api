@@ -1,11 +1,11 @@
 //! Wire types. Kept separate from domain types so the API contract changes
 //! only on purpose; every type here appears in the OpenAPI document.
 
-use chrono::{DateTime, Utc};
 use nirog_application::services::catalog::ComparisonView;
 use nirog_application::{BuyLink, LinkKind, SavedMatch, SearchGroup, User};
 use nirog_domain::{Offer, PackUnit, SourceKind};
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -210,7 +210,8 @@ pub struct SavedMatchDto {
     pub key: String,
     pub offer_id: Option<String>,
     pub label: String,
-    pub created_at: DateTime<Utc>,
+    #[serde(with = "time::serde::rfc3339")]
+    pub created_at: OffsetDateTime,
 }
 
 impl From<SavedMatch> for SavedMatchDto {

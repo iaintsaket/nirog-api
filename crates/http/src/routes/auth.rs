@@ -66,7 +66,7 @@ pub async fn callback(
     }
     match s.auth.complete_login(&code, &state).await {
         Ok(token) => {
-            let max_age = s.auth.session_ttl().num_seconds();
+            let max_age = s.auth.session_ttl().whole_seconds();
             let session = set_cookie(&s, s.session_cookie(), &token.0, max_age);
             let to = format!("{}/saved", s.config.web_origin);
             (

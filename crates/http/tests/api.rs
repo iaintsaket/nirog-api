@@ -115,7 +115,7 @@ async fn app_with(pool: PgPool, config: HttpConfig) -> Router {
             Arc::new(PgLoginStateRepository::new(pool.clone())),
             Arc::new(FakeGoogle),
             Arc::new(SystemClock),
-            chrono::Duration::days(30),
+            time::Duration::days(30),
         ),
         saved: SavedMatchService::new(Arc::new(PgSavedMatchRepository::new(pool)), offers),
         config: Arc::new(config),

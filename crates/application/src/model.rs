@@ -1,6 +1,6 @@
-use chrono::{DateTime, Utc};
 use nirog_domain::{MatchKey, Offer, OfferId};
 use serde::Serialize;
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
@@ -58,5 +58,5 @@ pub struct SavedMatch {
     pub key: MatchKey,
     pub offer_id: Option<OfferId>,
     pub label: String,
-    pub created_at: DateTime<Utc>,
+    pub created_at: OffsetDateTime,
 }

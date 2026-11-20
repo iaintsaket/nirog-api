@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use chrono::Duration;
+use time::Duration;
 
 use crate::error::AppError;
 use crate::model::{User, UserId};
