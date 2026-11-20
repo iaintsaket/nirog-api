@@ -71,3 +71,17 @@ pub struct SavedMatch {
     pub label: String,
     pub created_at: OffsetDateTime,
 }
+
+/// Headline figures about the price data, for the home screen.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CatalogStats {
+    /// Every product we hold a price for.
+    pub medicines: u64,
+    pub jan_aushadhi: u64,
+    /// Products with an exact substitute that costs less per unit.
+    pub with_cheaper_substitute: u64,
+    /// Median saving per unit for those products, in basis points.
+    pub median_saving_bps: u32,
+    /// Date of the newest price list.
+    pub prices_updated_on: Option<time::Date>,
+}

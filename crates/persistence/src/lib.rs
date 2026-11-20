@@ -4,11 +4,13 @@
 mod offers;
 mod saved;
 mod sessions;
+mod stats;
 mod users;
 
 pub use offers::PgOfferRepository;
 pub use saved::PgSavedMatchRepository;
 pub use sessions::{PgLoginStateRepository, PgSessionRepository};
+pub use stats::PgStatsRepository;
 pub use users::PgUserRepository;
 
 use nirog_application::RepoError;

@@ -399,6 +399,25 @@
           }
         }
       }
+    },
+    "/v1/stats": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "operationId": "stats",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -706,6 +725,48 @@
           "jan_aushadhi",
           "brand"
         ]
+      },
+      "StatsResponse": {
+        "type": "object",
+        "description": "Headline figures about the price data, for the home screen.",
+        "required": [
+          "medicines",
+          "jan_aushadhi",
+          "with_cheaper_substitute",
+          "median_saving_bps"
+        ],
+        "properties": {
+          "jan_aushadhi": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "median_saving_bps": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Median saving per unit for those medicines, in basis points (5147 = 51.47%).",
+            "minimum": 0
+          },
+          "medicines": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Every medicine we hold a price for.",
+            "minimum": 0
+          },
+          "prices_updated_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Date of the newest price list, YYYY-MM-DD."
+          },
+          "with_cheaper_substitute": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Medicines with an exact substitute that costs less per unit.",
+            "minimum": 0
+          }
+        }
       },
       "Unit": {
         "type": "string",

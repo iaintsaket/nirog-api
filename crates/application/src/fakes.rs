@@ -360,3 +360,21 @@ impl PriceSource for FakeSource {
         self.0.clone().map(|o| (o, 2)).map_err(SourceError)
     }
 }
+
+/// Returns fixed figures and counts how often it was asked.
+#[derive(Default)]
+pub struct FakeStats(pub std::sync::atomic::AtomicUsize);
+
+#[async_trait]
+impl crate::ports::StatsRepository for FakeStats {
+    async fn stats(&self) -> Result<crate::model::CatalogStats, RepoError> {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Ok(crate::model::CatalogStats {
+            medicines: 349_595,
+            jan_aushadhi: 2_000,
+            with_cheaper_substitute: 300_000,
+            median_saving_bps: 5_000,
+            prices_updated_on: Some(time::macros::date!(2025 - 10 - 22)),
+        })
+    }
+}
