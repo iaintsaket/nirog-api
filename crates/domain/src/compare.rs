@@ -53,6 +53,26 @@ impl Comparison {
     pub fn cheapest(&self) -> &Offer {
         &self.offers[0]
     }
+
+    /// Keeps the `limit` cheapest offers plus the searched one (moved to the end
+    /// if it fell outside). Savings were computed on the full list and stay valid.
+    #[must_use]
+    pub fn top(mut self, limit: usize) -> Self {
+        let limit = limit.max(1);
+        if self.offers.len() <= limit {
+            return self;
+        }
+        match self.searched {
+            Some(i) if i >= limit => {
+                let searched = self.offers.swap_remove(i);
+                self.offers.truncate(limit);
+                self.offers.push(searched);
+                self.searched = Some(limit);
+            }
+            _ => self.offers.truncate(limit),
+        }
+        self
+    }
 }
 
 #[cfg(test)]
@@ -129,6 +149,35 @@ mod tests {
         .unwrap();
         assert_eq!(c.saving_per_pack, Paise(1591));
         assert_eq!(c.saving_bps, 5147);
+    }
+
+    #[test]
+    fn top_keeps_cheapest_and_the_searched_offer() {
+        let offers = (1..=5)
+            .map(|i| offer(&format!("o{i}"), i * 100, 1, 1))
+            .collect::<Vec<_>>();
+        let c = Comparison::build(offers.clone(), Some(&OfferId("o5".into()))).unwrap();
+        let saving = c.saving_per_pack;
+        let t = c.top(2);
+        assert_eq!(
+            t.offers.iter().map(|o| o.id.0.as_str()).collect::<Vec<_>>(),
+            ["o1", "o2", "o5"]
+        );
+        assert_eq!(t.searched, Some(2));
+        assert_eq!(t.saving_per_pack, saving);
+
+        let t = Comparison::build(offers.clone(), Some(&OfferId("o2".into())))
+            .unwrap()
+            .top(3);
+        assert_eq!((t.offers.len(), t.searched), (3, Some(1)));
+        assert_eq!(
+            Comparison::build(offers, None)
+                .unwrap()
+                .top(10)
+                .offers
+                .len(),
+            5
+        );
     }
 
     #[test]

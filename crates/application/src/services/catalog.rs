@@ -10,10 +10,14 @@ pub const MIN_QUERY: usize = 2;
 pub const MAX_QUERY: usize = 100;
 const SEARCH_ROWS: u32 = 200;
 const MAX_GROUPS: usize = 20;
+pub const MAX_COMPARED: usize = 50;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ComparisonView {
+    /// At most [`MAX_COMPARED`] offers (plus the searched one).
     pub comparison: Comparison,
+    /// How many exact substitutes exist in total.
+    pub total: usize,
     /// Buy links, index-aligned with `comparison.offers`.
     pub links: Vec<Vec<BuyLink>>,
 }
@@ -69,14 +73,20 @@ impl CatalogService {
             return Err(AppError::NotFound);
         }
         let searched = searched.map(|s| OfferId(s.to_owned()));
-        let comparison =
-            Comparison::build(offers, searched.as_ref()).map_err(|_| AppError::NotFound)?;
+        let total = offers.len();
+        let comparison = Comparison::build(offers, searched.as_ref())
+            .map_err(|_| AppError::NotFound)?
+            .top(MAX_COMPARED);
         let links = comparison
             .offers
             .iter()
             .map(|o| self.sellers.links(o))
             .collect();
-        Ok(ComparisonView { comparison, links })
+        Ok(ComparisonView {
+            comparison,
+            total,
+            links,
+        })
     }
 }
 

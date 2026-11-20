@@ -3,3 +3,5 @@
 *.profraw
 lcov.info
 /data/private/
+.env.*
+!.env.example

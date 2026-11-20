@@ -276,6 +276,7 @@ async fn search_and_compare_find_the_cheapest(pool: PgPool) {
     assert_eq!(cmp.json["offers"][0]["links"][0]["kind"], "store");
     assert_eq!(cmp.json["offers"][1]["links"][0]["kind"], "online");
     assert_eq!(cmp.json["searched_index"], 1);
+    assert_eq!(cmp.json["total_offers"], 2);
     assert_eq!(cmp.json["saving_per_pack_paise"], 1591);
 
     assert_eq!(

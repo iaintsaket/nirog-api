@@ -1,0 +1,19 @@
+# Local development database. Usage: docker compose -f deploy/docker-compose.yml up -d
+# Credentials here are for local use only.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: nirog
+      POSTGRES_PASSWORD: nirog
+      POSTGRES_DB: nirog
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nirog"]
+      interval: 5s
+      retries: 10
+volumes:
+  pgdata:

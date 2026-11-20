@@ -153,8 +153,10 @@ pub struct ComparedOffer {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ComparisonResponse {
     pub key: String,
-    /// Cheapest per unit first.
+    /// Cheapest per unit first: the 50 cheapest, plus the searched offer if it ranks lower.
     pub offers: Vec<ComparedOffer>,
+    /// Number of exact substitutes in the catalogue.
+    pub total_offers: usize,
     /// Index into `offers` of the medicine the user searched for, if known.
     pub searched_index: Option<usize>,
     /// Saving per pack of the searched (or costliest) offer when buying the cheapest, in paise.
@@ -177,6 +179,7 @@ impl From<ComparisonView> for ComparisonResponse {
                     links: links.iter().map(BuyLinkDto::from).collect(),
                 })
                 .collect(),
+            total_offers: v.total,
             searched_index: c.searched,
             saving_per_pack_paise: c.saving_per_pack.0,
             saving_bps: c.saving_bps,

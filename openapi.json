@@ -457,6 +457,7 @@
         "required": [
           "key",
           "offers",
+          "total_offers",
           "saving_per_pack_paise",
           "saving_bps"
         ],
@@ -469,7 +470,7 @@
             "items": {
               "$ref": "#/components/schemas/ComparedOffer"
             },
-            "description": "Cheapest per unit first."
+            "description": "Cheapest per unit first: the 50 cheapest, plus the searched offer if it ranks lower."
           },
           "saving_bps": {
             "type": "integer",
@@ -487,6 +488,11 @@
               "null"
             ],
             "description": "Index into `offers` of the medicine the user searched for, if known.",
+            "minimum": 0
+          },
+          "total_offers": {
+            "type": "integer",
+            "description": "Number of exact substitutes in the catalogue.",
             "minimum": 0
           }
         }
