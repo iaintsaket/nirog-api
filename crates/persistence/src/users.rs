@@ -53,7 +53,11 @@ impl UserRepository for PgUserRepository {
     }
 
     async fn delete(&self, id: UserId) -> Result<bool, RepoError> {
-        let res = sqlx::query("DELETE FROM users WHERE id = $1").bind(id.0).execute(&self.pool).await.map_err(db)?;
+        let res = sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(id.0)
+            .execute(&self.pool)
+            .await
+            .map_err(db)?;
         Ok(res.rows_affected() > 0)
     }
 }
@@ -63,17 +67,28 @@ pub(crate) mod tests {
     use super::*;
 
     pub(crate) fn identity(subject: &str, email: &str) -> Identity {
-        Identity { provider: "google", subject: subject.into(), email: email.into(), name: "Asha".into() }
+        Identity {
+            provider: "google",
+            subject: subject.into(),
+            email: email.into(),
+            name: "Asha".into(),
+        }
     }
 
     #[sqlx::test(migrator = "crate::MIGRATOR")]
     async fn upsert_is_stable_per_subject_and_delete_works(pool: PgPool) -> Result<(), RepoError> {
         let repo = PgUserRepository::new(pool);
-        let first = repo.upsert_identity(&identity("sub-1", "a@example.com")).await?;
-        let again = repo.upsert_identity(&identity("sub-1", "new@example.com")).await?;
+        let first = repo
+            .upsert_identity(&identity("sub-1", "a@example.com"))
+            .await?;
+        let again = repo
+            .upsert_identity(&identity("sub-1", "new@example.com"))
+            .await?;
         assert_eq!(first.id, again.id);
         assert_eq!(again.email, "new@example.com");
-        let other = repo.upsert_identity(&identity("sub-2", "b@example.com")).await?;
+        let other = repo
+            .upsert_identity(&identity("sub-2", "b@example.com"))
+            .await?;
         assert_ne!(first.id, other.id);
 
         assert_eq!(repo.get(first.id).await?, Some(again));

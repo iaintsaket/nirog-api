@@ -13,7 +13,10 @@ impl Paise {
     pub fn from_rupees_str(s: &str) -> Result<Self, DomainError> {
         let s = s.trim();
         let (whole, frac) = s.split_once('.').unwrap_or((s, ""));
-        if whole.is_empty() || !whole.bytes().all(|b| b.is_ascii_digit()) || !frac.bytes().all(|b| b.is_ascii_digit()) {
+        if whole.is_empty()
+            || !whole.bytes().all(|b| b.is_ascii_digit())
+            || !frac.bytes().all(|b| b.is_ascii_digit())
+        {
             return Err(DomainError::Invalid("price"));
         }
         let mut frac2: String = frac.chars().take(2).collect();
@@ -22,7 +25,10 @@ impl Paise {
         }
         let rupees: i64 = whole.parse().map_err(|_| DomainError::Invalid("price"))?;
         let paise: i64 = frac2.parse().map_err(|_| DomainError::Invalid("price"))?;
-        let total = rupees.checked_mul(100).and_then(|r| r.checked_add(paise)).ok_or(DomainError::Invalid("price"))?;
+        let total = rupees
+            .checked_mul(100)
+            .and_then(|r| r.checked_add(paise))
+            .ok_or(DomainError::Invalid("price"))?;
         if total <= 0 {
             return Err(DomainError::Invalid("price"));
         }
@@ -161,7 +167,10 @@ pub struct Salt {
 
 impl Salt {
     pub fn mg(name: &str, ug: u64) -> Self {
-        Self { name: name.to_owned(), strength: Some(Strength::Micrograms(ug)) }
+        Self {
+            name: name.to_owned(),
+            strength: Some(Strength::Micrograms(ug)),
+        }
     }
 }
 
@@ -209,7 +218,16 @@ mod tests {
 
     #[test]
     fn rejects_bad_prices() {
-        for bad in ["", "abc", "0", "0.00", "-5", "1.2.3", ".5", "99999999999999999999"] {
+        for bad in [
+            "",
+            "abc",
+            "0",
+            "0.00",
+            "-5",
+            "1.2.3",
+            ".5",
+            "99999999999999999999",
+        ] {
             assert!(Paise::from_rupees_str(bad).is_err(), "{bad} should fail");
         }
     }
@@ -224,9 +242,30 @@ mod tests {
         }
         assert!(SourceKind::parse("x").is_err());
         assert!(PackUnit::parse("x").is_err());
-        let forms = [Form::Tablet, Form::Capsule, Form::Liquid, Form::Injection, Form::Topical, Form::Inhaler, Form::EyeEar, Form::Other];
+        let forms = [
+            Form::Tablet,
+            Form::Capsule,
+            Form::Liquid,
+            Form::Injection,
+            Form::Topical,
+            Form::Inhaler,
+            Form::EyeEar,
+            Form::Other,
+        ];
         let names: Vec<_> = forms.iter().map(|f| f.as_str()).collect();
-        assert_eq!(names, ["tablet", "capsule", "liquid", "injection", "topical", "inhaler", "eye-ear", "other"]);
+        assert_eq!(
+            names,
+            [
+                "tablet",
+                "capsule",
+                "liquid",
+                "injection",
+                "topical",
+                "inhaler",
+                "eye-ear",
+                "other"
+            ]
+        );
         assert_eq!(Release::Extended.as_str(), "extended");
     }
 

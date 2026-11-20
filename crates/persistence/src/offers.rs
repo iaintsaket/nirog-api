@@ -37,16 +37,21 @@ fn to_offer(row: &PgRow) -> Result<Offer, RepoError> {
         price: Paise(row.try_get("price_paise").map_err(db)?),
         pack: Pack {
             count: u32::try_from(count).map_err(|_| bad("pack_count"))?,
-            unit: PackUnit::parse(row.try_get("pack_unit").map_err(db)?).map_err(|_| bad("pack_unit"))?,
+            unit: PackUnit::parse(row.try_get("pack_unit").map_err(db)?)
+                .map_err(|_| bad("pack_unit"))?,
         },
-        key: MatchKey::parse(row.try_get("match_key").map_err(db)?).ok_or_else(|| bad("match_key"))?,
+        key: MatchKey::parse(row.try_get("match_key").map_err(db)?)
+            .ok_or_else(|| bad("match_key"))?,
         salts_label: row.try_get("salts_label").map_err(db)?,
     })
 }
 
 /// Escapes LIKE wildcards so user input is matched literally.
 fn like_pattern(query: &str) -> String {
-    let escaped = query.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+    let escaped = query
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_");
     format!("%{}%", escaped.to_lowercase())
 }
 
@@ -71,7 +76,11 @@ impl OfferRepository for PgOfferRepository {
 
     async fn by_key(&self, key: &MatchKey) -> Result<Vec<Offer>, RepoError> {
         let sql = select_offers!("WHERE match_key = $1 ORDER BY unit_price_millipaise, id");
-        let rows = sqlx::query(sql).bind(key.as_str()).fetch_all(&self.pool).await.map_err(db)?;
+        let rows = sqlx::query(sql)
+            .bind(key.as_str())
+            .fetch_all(&self.pool)
+            .await
+            .map_err(db)?;
         rows.iter().map(to_offer).collect()
     }
 
@@ -98,7 +107,11 @@ impl OfferRepository for PgOfferRepository {
             let mut unit = Vec::new();
             for o in chunk {
                 if o.source != source {
-                    return Err(RepoError(format!("offer {} is not from {}", o.id.0, source.as_str())));
+                    return Err(RepoError(format!(
+                        "offer {} is not from {}",
+                        o.id.0,
+                        source.as_str()
+                    )));
                 }
                 cols[0].push(o.id.0.clone());
                 cols[1].push(o.source.as_str().to_owned());
@@ -107,7 +120,10 @@ impl OfferRepository for PgOfferRepository {
                 cols[4].push(o.key.as_str().to_owned());
                 cols[5].push(o.salts_label.clone());
                 price.push(o.price.0);
-                count.push(i32::try_from(o.pack.count).map_err(|_| RepoError("pack count too large".into()))?);
+                count.push(
+                    i32::try_from(o.pack.count)
+                        .map_err(|_| RepoError("pack count too large".into()))?,
+                );
                 unit.push(o.pack.unit.as_str().to_owned());
                 unit_price.push(o.unit_price_millipaise());
             }
@@ -143,7 +159,14 @@ mod tests {
     use super::*;
     use nirog_domain::{Form, Release, Salt};
 
-    pub(crate) fn offer(id: &str, source: SourceKind, name: &str, paise: i64, count: u32, mg: u64) -> Offer {
+    pub(crate) fn offer(
+        id: &str,
+        source: SourceKind,
+        name: &str,
+        paise: i64,
+        count: u32,
+        mg: u64,
+    ) -> Offer {
         let salts = [Salt::mg("paracetamol", mg * 1000)];
         Offer {
             id: OfferId(id.into()),
@@ -151,8 +174,12 @@ mod tests {
             name: name.into(),
             manufacturer: "Maker".into(),
             price: Paise(paise),
-            pack: Pack { count, unit: PackUnit::Unit },
-            key: MatchKey::new(&salts, Form::Tablet, Release::Standard, PackUnit::Unit).unwrap_or_else(|| unreachable!()),
+            pack: Pack {
+                count,
+                unit: PackUnit::Unit,
+            },
+            key: MatchKey::new(&salts, Form::Tablet, Release::Standard, PackUnit::Unit)
+                .unwrap_or_else(|| unreachable!()),
             salts_label: format!("Paracetamol {mg}mg"),
         }
     }
@@ -166,17 +193,35 @@ mod tests {
     #[sqlx::test(migrator = "crate::MIGRATOR")]
     async fn replace_search_and_key_lookup(pool: PgPool) -> Result<(), RepoError> {
         let repo = PgOfferRepository::new(pool);
-        let ja = offer("ja:1", SourceKind::JanAushadhi, "Paracetamol 650", 1500, 10, 650);
+        let ja = offer(
+            "ja:1",
+            SourceKind::JanAushadhi,
+            "Paracetamol 650",
+            1500,
+            10,
+            650,
+        );
         let dolo = offer("brand:1", SourceKind::Brand, "Dolo 650", 3400, 15, 650);
         let other = offer("brand:2", SourceKind::Brand, "Calpol 500", 2000, 15, 500);
-        assert_eq!(repo.replace_source(SourceKind::JanAushadhi, std::slice::from_ref(&ja)).await?, 1);
-        assert_eq!(repo.replace_source(SourceKind::Brand, &[dolo.clone(), other.clone()]).await?, 2);
+        assert_eq!(
+            repo.replace_source(SourceKind::JanAushadhi, std::slice::from_ref(&ja))
+                .await?,
+            1
+        );
+        assert_eq!(
+            repo.replace_source(SourceKind::Brand, &[dolo.clone(), other.clone()])
+                .await?,
+            2
+        );
 
         assert_eq!(repo.search("DOLO", 10).await?, vec![dolo.clone()]);
         assert_eq!(repo.search("paracetamol", 1).await?.len(), 1);
         assert!(repo.search("100%", 10).await?.is_empty());
         // Cheapest per unit first: JA 150 paise/tab beats Dolo ~227.
-        assert_eq!(repo.by_key(&dolo.key).await?, vec![ja.clone(), dolo.clone()]);
+        assert_eq!(
+            repo.by_key(&dolo.key).await?,
+            vec![ja.clone(), dolo.clone()]
+        );
         assert!(repo.key_exists(&other.key).await?);
 
         // Replacing one source leaves the other alone.
@@ -190,9 +235,14 @@ mod tests {
     async fn replace_rejects_mixed_sources_and_rolls_back(pool: PgPool) -> Result<(), RepoError> {
         let repo = PgOfferRepository::new(pool);
         let ja = offer("ja:1", SourceKind::JanAushadhi, "P", 1500, 10, 650);
-        repo.replace_source(SourceKind::JanAushadhi, std::slice::from_ref(&ja)).await?;
+        repo.replace_source(SourceKind::JanAushadhi, std::slice::from_ref(&ja))
+            .await?;
         let wrong = offer("brand:1", SourceKind::Brand, "D", 3400, 15, 650);
-        assert!(repo.replace_source(SourceKind::JanAushadhi, &[wrong]).await.is_err());
+        assert!(
+            repo.replace_source(SourceKind::JanAushadhi, &[wrong])
+                .await
+                .is_err()
+        );
         assert_eq!(repo.by_key(&ja.key).await?, vec![ja]);
         Ok(())
     }

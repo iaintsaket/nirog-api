@@ -20,14 +20,34 @@ impl Comparison {
         if offers.iter().any(|o| o.key != first_key) {
             return Err(DomainError::MixedKeys);
         }
-        offers.sort_by(|a, b| a.unit_price_millipaise().cmp(&b.unit_price_millipaise()).then_with(|| a.id.cmp(&b.id)));
+        offers.sort_by(|a, b| {
+            a.unit_price_millipaise()
+                .cmp(&b.unit_price_millipaise())
+                .then_with(|| a.id.cmp(&b.id))
+        });
         let searched_idx = searched.and_then(|id| offers.iter().position(|o| &o.id == id));
-        let cheapest = offers[0].unit_price_millipaise();
+        let cheapest = &offers[0];
         let reference = &offers[searched_idx.unwrap_or(offers.len() - 1)];
-        let ref_unit = reference.unit_price_millipaise();
-        let saving_per_pack = (ref_unit - cheapest) * i64::from(reference.pack.count) / 1000;
-        let saving_bps = if ref_unit > 0 { (ref_unit - cheapest) * 10_000 / ref_unit } else { 0 };
-        Ok(Self { offers, searched: searched_idx, saving_per_pack: Paise(saving_per_pack), saving_bps })
+        // Exact cost of the reference pack's quantity at the cheapest offer's price,
+        // rounded to the nearest paisa (no rounded unit prices in between).
+        let (num, den) = (
+            i128::from(cheapest.price.0) * i128::from(reference.pack.count),
+            i128::from(cheapest.pack.count.max(1)),
+        );
+        let same_quantity_at_cheapest = (2 * num + den) / (2 * den);
+        let saving = (i128::from(reference.price.0) - same_quantity_at_cheapest).max(0);
+        let saving_bps = if reference.price.0 > 0 {
+            saving * 10_000 / i128::from(reference.price.0)
+        } else {
+            0
+        };
+        let to_i64 = |v: i128| i64::try_from(v).unwrap_or(i64::MAX);
+        Ok(Self {
+            offers,
+            searched: searched_idx,
+            saving_per_pack: Paise(to_i64(saving)),
+            saving_bps: to_i64(saving_bps),
+        })
     }
 
     pub fn cheapest(&self) -> &Offer {
@@ -48,8 +68,17 @@ mod tests {
             name: id.into(),
             manufacturer: String::new(),
             price: Paise(price),
-            pack: Pack { count, unit: PackUnit::Unit },
-            key: MatchKey::new(&[Salt::mg("atorvastatin", ug)], Form::Tablet, Release::Standard, PackUnit::Unit).unwrap(),
+            pack: Pack {
+                count,
+                unit: PackUnit::Unit,
+            },
+            key: MatchKey::new(
+                &[Salt::mg("atorvastatin", ug)],
+                Form::Tablet,
+                Release::Standard,
+                PackUnit::Unit,
+            )
+            .unwrap(),
             salts_label: String::new(),
         }
     }
@@ -57,7 +86,11 @@ mod tests {
     #[test]
     fn sorts_cheapest_first_and_reports_saving_against_searched() {
         let c = Comparison::build(
-            vec![offer("lipitor", 20_000, 10, 10_000), offer("atorva", 10_000, 10, 10_000), offer("ja", 908, 10, 10_000)],
+            vec![
+                offer("lipitor", 20_000, 10, 10_000),
+                offer("atorva", 10_000, 10, 10_000),
+                offer("ja", 908, 10, 10_000),
+            ],
             Some(&OfferId("lipitor".into())),
         )
         .unwrap();
@@ -81,8 +114,21 @@ mod tests {
 
     #[test]
     fn zero_saving_when_searched_is_cheapest() {
-        let c = Comparison::build(vec![offer("a", 1000, 10, 1)], Some(&OfferId("a".into()))).unwrap();
+        let c =
+            Comparison::build(vec![offer("a", 1000, 10, 1)], Some(&OfferId("a".into()))).unwrap();
         assert_eq!((c.saving_per_pack, c.saving_bps), (Paise(0), 0));
+    }
+
+    #[test]
+    fn saving_uses_exact_pack_prices_not_rounded_unit_prices() {
+        // 30.91 for 15 vs 15.00 for 15: saving is exactly 15.91.
+        let c = Comparison::build(
+            vec![offer("a", 3091, 15, 650_000), offer("b", 1500, 15, 650_000)],
+            Some(&OfferId("a".into())),
+        )
+        .unwrap();
+        assert_eq!(c.saving_per_pack, Paise(1591));
+        assert_eq!(c.saving_bps, 5147);
     }
 
     #[test]

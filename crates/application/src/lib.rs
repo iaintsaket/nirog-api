@@ -14,4 +14,6 @@ pub mod services;
 mod fakes;
 
 pub use error::{AppError, IdentityError, RepoError};
-pub use model::{BuyLink, Identity, LinkKind, NewSavedMatch, SavedMatch, SearchGroup, User, UserId};
+pub use model::{
+    BuyLink, Identity, LinkKind, NewSavedMatch, SavedMatch, SearchGroup, User, UserId,
+};

@@ -31,7 +31,10 @@ pub async fn connect(url: &str, max_connections: u32) -> Result<PgPool, RepoErro
 }
 
 pub async fn migrate(pool: &PgPool) -> Result<(), RepoError> {
-    MIGRATOR.run(pool).await.map_err(|e| RepoError(e.to_string()))
+    MIGRATOR
+        .run(pool)
+        .await
+        .map_err(|e| RepoError(e.to_string()))
 }
 
 pub(crate) fn db(e: sqlx::Error) -> RepoError {

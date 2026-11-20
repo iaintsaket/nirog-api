@@ -5,19 +5,27 @@ use std::sync::Mutex;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, TimeZone, Utc};
-use nirog_domain::{Form, MatchKey, Offer, OfferId, Pack, PackUnit, Paise, Release, Salt, SourceKind};
+use nirog_domain::{
+    Form, MatchKey, Offer, OfferId, Pack, PackUnit, Paise, Release, Salt, SourceKind,
+};
 use uuid::Uuid;
 
 use crate::error::{IdentityError, RepoError};
 use crate::model::{Identity, NewSavedMatch, SavedMatch, User, UserId};
 use crate::ports::{
-    Clock, IdentityProvider, LoginStateRepository, OfferRepository, PriceSource, SavedMatchRepository, SessionRepository,
-    SourceError, UserRepository,
+    Clock, IdentityProvider, LoginStateRepository, OfferRepository, PriceSource,
+    SavedMatchRepository, SessionRepository, SourceError, UserRepository,
 };
 use crate::security::TokenHash;
 
 pub fn key(name: &str) -> MatchKey {
-    MatchKey::new(&[Salt::mg(name, 1000)], Form::Tablet, Release::Standard, PackUnit::Unit).unwrap()
+    MatchKey::new(
+        &[Salt::mg(name, 1000)],
+        Form::Tablet,
+        Release::Standard,
+        PackUnit::Unit,
+    )
+    .unwrap()
 }
 
 pub fn offer(id: &str, source: SourceKind, name: &str, price: i64, key_name: &str) -> Offer {
@@ -27,7 +35,10 @@ pub fn offer(id: &str, source: SourceKind, name: &str, price: i64, key_name: &st
         name: name.into(),
         manufacturer: "Maker".into(),
         price: Paise(price),
-        pack: Pack { count: 10, unit: PackUnit::Unit },
+        pack: Pack {
+            count: 10,
+            unit: PackUnit::Unit,
+        },
         key: key(key_name),
         salts_label: format!("{key_name} 1mg"),
     }
@@ -49,13 +60,22 @@ impl OfferRepository for FakeOffers {
         let all = self.0.lock().unwrap();
         Ok(all
             .iter()
-            .filter(|o| o.name.to_lowercase().contains(&q) || o.salts_label.to_lowercase().contains(&q))
+            .filter(|o| {
+                o.name.to_lowercase().contains(&q) || o.salts_label.to_lowercase().contains(&q)
+            })
             .take(limit as usize)
             .cloned()
             .collect())
     }
     async fn by_key(&self, key: &MatchKey) -> Result<Vec<Offer>, RepoError> {
-        Ok(self.0.lock().unwrap().iter().filter(|o| &o.key == key).cloned().collect())
+        Ok(self
+            .0
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|o| &o.key == key)
+            .cloned()
+            .collect())
     }
     async fn key_exists(&self, key: &MatchKey) -> Result<bool, RepoError> {
         Ok(self.0.lock().unwrap().iter().any(|o| &o.key == key))
@@ -73,7 +93,9 @@ pub struct FakeClock(Mutex<DateTime<Utc>>);
 
 impl Default for FakeClock {
     fn default() -> Self {
-        Self(Mutex::new(Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap()))
+        Self(Mutex::new(
+            Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+        ))
     }
 }
 
@@ -108,7 +130,12 @@ impl IdentityProvider for FakeIdp {
     }
     async fn exchange(&self, _code: &str, _verifier: &str) -> Result<Identity, IdentityError> {
         if self.0 {
-            Ok(Identity { provider: "fake", subject: "sub-1".into(), email: "asha@example.com".into(), name: "Asha".into() })
+            Ok(Identity {
+                provider: "fake",
+                subject: "sub-1".into(),
+                email: "asha@example.com".into(),
+                name: "Asha".into(),
+            })
         } else {
             Err(IdentityError::Rejected("bad code".into()))
         }
@@ -131,12 +158,21 @@ impl UserRepository for InMemoryAuth {
         if let Some((_, u)) = users.values().find(|(s, _)| *s == subject) {
             return Ok(u.clone());
         }
-        let user = User { id: UserId(Uuid::new_v4()), email: id.email.clone(), name: id.name.clone() };
+        let user = User {
+            id: UserId(Uuid::new_v4()),
+            email: id.email.clone(),
+            name: id.name.clone(),
+        };
         users.insert(user.id.0, (subject, user.clone()));
         Ok(user)
     }
     async fn get(&self, id: UserId) -> Result<Option<User>, RepoError> {
-        Ok(self.users.lock().unwrap().get(&id.0).map(|(_, u)| u.clone()))
+        Ok(self
+            .users
+            .lock()
+            .unwrap()
+            .get(&id.0)
+            .map(|(_, u)| u.clone()))
     }
     async fn delete(&self, id: UserId) -> Result<bool, RepoError> {
         self.sessions.lock().unwrap().retain(|_, (u, _)| *u != id);
@@ -146,12 +182,30 @@ impl UserRepository for InMemoryAuth {
 
 #[async_trait]
 impl SessionRepository for InMemoryAuth {
-    async fn create(&self, hash: &TokenHash, user: UserId, expires_at: DateTime<Utc>) -> Result<(), RepoError> {
-        self.sessions.lock().unwrap().insert(hash.clone(), (user, expires_at));
+    async fn create(
+        &self,
+        hash: &TokenHash,
+        user: UserId,
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), RepoError> {
+        self.sessions
+            .lock()
+            .unwrap()
+            .insert(hash.clone(), (user, expires_at));
         Ok(())
     }
-    async fn user_for(&self, hash: &TokenHash, now: DateTime<Utc>) -> Result<Option<UserId>, RepoError> {
-        Ok(self.sessions.lock().unwrap().get(hash).filter(|(_, exp)| *exp > now).map(|(u, _)| *u))
+    async fn user_for(
+        &self,
+        hash: &TokenHash,
+        now: DateTime<Utc>,
+    ) -> Result<Option<UserId>, RepoError> {
+        Ok(self
+            .sessions
+            .lock()
+            .unwrap()
+            .get(hash)
+            .filter(|(_, exp)| *exp > now)
+            .map(|(u, _)| *u))
     }
     async fn delete(&self, hash: &TokenHash) -> Result<(), RepoError> {
         self.sessions.lock().unwrap().remove(hash);
@@ -161,12 +215,30 @@ impl SessionRepository for InMemoryAuth {
 
 #[async_trait]
 impl LoginStateRepository for InMemoryAuth {
-    async fn put(&self, state: &TokenHash, verifier: &str, expires_at: DateTime<Utc>) -> Result<(), RepoError> {
-        self.states.lock().unwrap().insert(state.clone(), (verifier.into(), expires_at));
+    async fn put(
+        &self,
+        state: &TokenHash,
+        verifier: &str,
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), RepoError> {
+        self.states
+            .lock()
+            .unwrap()
+            .insert(state.clone(), (verifier.into(), expires_at));
         Ok(())
     }
-    async fn take(&self, state: &TokenHash, now: DateTime<Utc>) -> Result<Option<String>, RepoError> {
-        Ok(self.states.lock().unwrap().remove(state).filter(|(_, exp)| *exp > now).map(|(v, _)| v))
+    async fn take(
+        &self,
+        state: &TokenHash,
+        now: DateTime<Utc>,
+    ) -> Result<Option<String>, RepoError> {
+        Ok(self
+            .states
+            .lock()
+            .unwrap()
+            .remove(state)
+            .filter(|(_, exp)| *exp > now)
+            .map(|(v, _)| v))
     }
 }
 
@@ -177,7 +249,16 @@ impl FakeSaved {
     pub fn fill(&self, user: UserId, n: u64) {
         let mut all = self.0.lock().unwrap();
         for i in 0..n {
-            all.push((user, SavedMatch { id: Uuid::new_v4(), key: key(&format!("f{i}")), offer_id: None, label: "x".into(), created_at: Utc::now() }));
+            all.push((
+                user,
+                SavedMatch {
+                    id: Uuid::new_v4(),
+                    key: key(&format!("f{i}")),
+                    offer_id: None,
+                    label: "x".into(),
+                    created_at: Utc::now(),
+                },
+            ));
         }
     }
 }
@@ -185,13 +266,32 @@ impl FakeSaved {
 #[async_trait]
 impl SavedMatchRepository for FakeSaved {
     async fn list(&self, user: UserId) -> Result<Vec<SavedMatch>, RepoError> {
-        Ok(self.0.lock().unwrap().iter().filter(|(u, _)| *u == user).map(|(_, s)| s.clone()).collect())
+        Ok(self
+            .0
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(u, _)| *u == user)
+            .map(|(_, s)| s.clone())
+            .collect())
     }
     async fn count(&self, user: UserId) -> Result<u64, RepoError> {
-        Ok(self.0.lock().unwrap().iter().filter(|(u, _)| *u == user).count() as u64)
+        Ok(self
+            .0
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(u, _)| *u == user)
+            .count() as u64)
     }
     async fn save(&self, user: UserId, item: &NewSavedMatch) -> Result<SavedMatch, RepoError> {
-        let s = SavedMatch { id: Uuid::new_v4(), key: item.key.clone(), offer_id: item.offer_id.clone(), label: item.label.clone(), created_at: Utc::now() };
+        let s = SavedMatch {
+            id: Uuid::new_v4(),
+            key: item.key.clone(),
+            offer_id: item.offer_id.clone(),
+            label: item.label.clone(),
+            created_at: Utc::now(),
+        };
         self.0.lock().unwrap().push((user, s.clone()));
         Ok(s)
     }

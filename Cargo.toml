@@ -36,7 +36,7 @@ thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.7", features = ["cors", "trace", "timeout", "limit", "set-header", "request-id"] }
-tower_governor = "0.8"
+tower_governor = { version = "0.8", default-features = false, features = ["axum"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 url = "2"

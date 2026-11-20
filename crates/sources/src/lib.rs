@@ -6,8 +6,8 @@ use std::path::PathBuf;
 
 use nirog_application::ports::{PriceSource, SourceError};
 use nirog_domain::parse::{
-    describe_salts, detect_form, detect_release, parse_brand_composition, parse_brand_pack, parse_jan_aushadhi_name,
-    parse_jan_aushadhi_pack,
+    describe_salts, detect_form, detect_release, parse_brand_composition, parse_brand_pack,
+    parse_jan_aushadhi_name, parse_jan_aushadhi_pack,
 };
 use nirog_domain::{MatchKey, Offer, OfferId, Pack, Paise, Salt, SourceKind};
 use serde::Deserialize;
@@ -26,16 +26,33 @@ struct Raw<'a> {
 }
 
 fn build(raw: Raw<'_>) -> Option<Offer> {
-    let Raw { id, source, name, manufacturer, price, pack, salts, form_text } = raw;
+    let Raw {
+        id,
+        source,
+        name,
+        manufacturer,
+        price,
+        pack,
+        salts,
+        form_text,
+    } = raw;
     let salts = &salts[..];
     let price = Paise::from_rupees_str(price.trim()).ok()?;
     let pack = pack.filter(|p| p.count > 0)?;
-    let key = MatchKey::new(salts, detect_form(form_text), detect_release(form_text), pack.unit)?;
+    let key = MatchKey::new(
+        salts,
+        detect_form(form_text),
+        detect_release(form_text),
+        pack.unit,
+    )?;
     Some(Offer {
         id: OfferId(id),
         source,
         name: name.split_whitespace().collect::<Vec<_>>().join(" "),
-        manufacturer: manufacturer.split_whitespace().collect::<Vec<_>>().join(" "),
+        manufacturer: manufacturer
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" "),
         price,
         pack,
         key,
@@ -142,7 +159,9 @@ impl BrandDatasetCsv {
 
     pub fn parse<R: Read>(reader: R) -> Result<(Vec<Offer>, usize), SourceError> {
         read_all(reader, |r: BrandRow| {
-            if r.discontinued.trim().eq_ignore_ascii_case("true") || !r.kind.trim().eq_ignore_ascii_case("allopathy") {
+            if r.discontinued.trim().eq_ignore_ascii_case("true")
+                || !r.kind.trim().eq_ignore_ascii_case("allopathy")
+            {
                 return None;
             }
             let composition = [r.short_composition1.trim(), r.short_composition2.trim()]
@@ -207,11 +226,18 @@ mod tests {
     }
 
     #[test]
-    fn brand_rows_skip_discontinued_non_allopathic_and_unknown_strength() -> Result<(), SourceError> {
+    fn brand_rows_skip_discontinued_non_allopathic_and_unknown_strength() -> Result<(), SourceError>
+    {
         let (offers, skipped) = BrandDatasetCsv::parse(BRANDS.as_bytes())?;
         assert_eq!(skipped, 3);
-        assert_eq!(offers.iter().map(|o| o.id.0.as_str()).collect::<Vec<_>>(), ["brand:1", "brand:2"]);
-        assert_eq!(offers[0].manufacturer, "Glaxo SmithKline Pharmaceuticals Ltd");
+        assert_eq!(
+            offers.iter().map(|o| o.id.0.as_str()).collect::<Vec<_>>(),
+            ["brand:1", "brand:2"]
+        );
+        assert_eq!(
+            offers[0].manufacturer,
+            "Glaxo SmithKline Pharmaceuticals Ltd"
+        );
         Ok(())
     }
 

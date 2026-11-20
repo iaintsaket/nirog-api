@@ -58,15 +58,24 @@ impl CatalogService {
         Ok(groups)
     }
 
-    pub async fn compare(&self, key: &str, searched: Option<&str>) -> Result<ComparisonView, AppError> {
+    pub async fn compare(
+        &self,
+        key: &str,
+        searched: Option<&str>,
+    ) -> Result<ComparisonView, AppError> {
         let key = MatchKey::parse(key).ok_or(AppError::Invalid("malformed match key"))?;
         let offers = self.offers.by_key(&key).await?;
         if offers.is_empty() {
             return Err(AppError::NotFound);
         }
         let searched = searched.map(|s| OfferId(s.to_owned()));
-        let comparison = Comparison::build(offers, searched.as_ref()).map_err(|_| AppError::NotFound)?;
-        let links = comparison.offers.iter().map(|o| self.sellers.links(o)).collect();
+        let comparison =
+            Comparison::build(offers, searched.as_ref()).map_err(|_| AppError::NotFound)?;
+        let links = comparison
+            .offers
+            .iter()
+            .map(|o| self.sellers.links(o))
+            .collect();
         Ok(ComparisonView { comparison, links })
     }
 }
@@ -86,7 +95,13 @@ mod tests {
         FakeOffers::with(vec![
             offer("b1", SourceKind::Brand, "Lipitor 10 Tablet", 20_000, "k1"),
             offer("b2", SourceKind::Brand, "Atorva 10 Tablet", 10_000, "k1"),
-            offer("j1", SourceKind::JanAushadhi, "Atorvastatin Tablets IP 10mg", 908, "k1"),
+            offer(
+                "j1",
+                SourceKind::JanAushadhi,
+                "Atorvastatin Tablets IP 10mg",
+                908,
+                "k1",
+            ),
             offer("b3", SourceKind::Brand, "Dolo 650 Tablet", 3_000, "k2"),
         ])
     }
@@ -102,20 +117,39 @@ mod tests {
     async fn search_rejects_too_short_or_long_queries() {
         let s = service(sample());
         assert!(matches!(s.search(" a ").await, Err(AppError::Invalid(_))));
-        assert!(matches!(s.search(&"x".repeat(101)).await, Err(AppError::Invalid(_))));
+        assert!(matches!(
+            s.search(&"x".repeat(101)).await,
+            Err(AppError::Invalid(_))
+        ));
     }
 
     #[tokio::test]
     async fn search_caps_groups() {
-        let many = (0..30).map(|i| offer(&format!("o{i}"), SourceKind::Brand, "Same Name", 100, &format!("key{i}"))).collect();
-        let groups = service(FakeOffers::with(many)).search("same").await.unwrap();
+        let many = (0..30)
+            .map(|i| {
+                offer(
+                    &format!("o{i}"),
+                    SourceKind::Brand,
+                    "Same Name",
+                    100,
+                    &format!("key{i}"),
+                )
+            })
+            .collect();
+        let groups = service(FakeOffers::with(many))
+            .search("same")
+            .await
+            .unwrap();
         assert_eq!(groups.len(), MAX_GROUPS);
     }
 
     #[tokio::test]
     async fn compare_returns_cheapest_first_with_links() {
         let key = crate::fakes::key("k1");
-        let view = service(sample()).compare(key.as_str(), Some("b1")).await.unwrap();
+        let view = service(sample())
+            .compare(key.as_str(), Some("b1"))
+            .await
+            .unwrap();
         assert_eq!(view.comparison.cheapest().id.0, "j1");
         assert_eq!(view.links.len(), 3);
         assert_eq!(view.links[0][0].label, "Find a Jan Aushadhi Kendra");
@@ -124,7 +158,13 @@ mod tests {
     #[tokio::test]
     async fn compare_errors() {
         let s = service(sample());
-        assert!(matches!(s.compare("bad", None).await, Err(AppError::Invalid(_))));
-        assert!(matches!(s.compare(crate::fakes::key("none").as_str(), None).await, Err(AppError::NotFound)));
+        assert!(matches!(
+            s.compare("bad", None).await,
+            Err(AppError::Invalid(_))
+        ));
+        assert!(matches!(
+            s.compare(crate::fakes::key("none").as_str(), None).await,
+            Err(AppError::NotFound)
+        ));
     }
 }

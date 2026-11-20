@@ -96,17 +96,30 @@ mod tests {
     }
 
     #[sqlx::test(migrator = "crate::MIGRATOR")]
-    async fn saved_matches_are_per_user_upserted_and_cascade(pool: PgPool) -> Result<(), RepoError> {
+    async fn saved_matches_are_per_user_upserted_and_cascade(
+        pool: PgPool,
+    ) -> Result<(), RepoError> {
         let users = PgUserRepository::new(pool.clone());
         let repo = PgSavedMatchRepository::new(pool);
-        let asha = users.upsert_identity(&identity("a", "a@example.com")).await?.id;
-        let ravi = users.upsert_identity(&identity("r", "r@example.com")).await?.id;
+        let asha = users
+            .upsert_identity(&identity("a", "a@example.com"))
+            .await?
+            .id;
+        let ravi = users
+            .upsert_identity(&identity("r", "r@example.com"))
+            .await?
+            .id;
 
-        let first = repo.save(asha, &item("tablet|standard|x:1mg|unit", "Dolo")).await?;
-        let updated = repo.save(asha, &item("tablet|standard|x:1mg|unit", "Dolo 650")).await?;
+        let first = repo
+            .save(asha, &item("tablet|standard|x:1mg|unit", "Dolo"))
+            .await?;
+        let updated = repo
+            .save(asha, &item("tablet|standard|x:1mg|unit", "Dolo 650"))
+            .await?;
         assert_eq!(first.id, updated.id);
         assert_eq!(updated.label, "Dolo 650");
-        repo.save(asha, &item("tablet|standard|y:1mg|unit", "Other")).await?;
+        repo.save(asha, &item("tablet|standard|y:1mg|unit", "Other"))
+            .await?;
         assert_eq!(repo.count(asha).await?, 2);
         assert_eq!(repo.list(ravi).await?, vec![]);
 

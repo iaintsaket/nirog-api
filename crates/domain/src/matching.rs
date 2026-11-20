@@ -19,13 +19,20 @@ impl MatchKey {
             .map(|s| s.strength.as_ref().map(|st| format!("{}:{st}", s.name)))
             .collect::<Option<Vec<_>>>()?;
         tokens.sort();
-        Some(Self(format!("{}|{}|{}|{}", form.as_str(), release.as_str(), tokens.join("+"), unit.as_str())))
+        Some(Self(format!(
+            "{}|{}|{}|{}",
+            form.as_str(),
+            release.as_str(),
+            tokens.join("+"),
+            unit.as_str()
+        )))
     }
 
     /// Rebuild a key that was produced by [`MatchKey::new`] (from storage or a URL).
     /// Only the shape is checked; an unknown key simply matches nothing.
     pub fn parse(raw: &str) -> Option<Self> {
-        let ok = raw.len() <= 512 && raw.split('|').count() == 4 && !raw.chars().any(char::is_control);
+        let ok =
+            raw.len() <= 512 && raw.split('|').count() == 4 && !raw.chars().any(char::is_control);
         ok.then(|| Self(raw.to_owned()))
     }
 
@@ -45,8 +52,16 @@ mod tests {
 
     #[test]
     fn ignores_salt_order() {
-        let a = key(&[Salt::mg("b", 1000), Salt::mg("a", 2000)], Form::Tablet, Release::Standard);
-        let b = key(&[Salt::mg("a", 2000), Salt::mg("b", 1000)], Form::Tablet, Release::Standard);
+        let a = key(
+            &[Salt::mg("b", 1000), Salt::mg("a", 2000)],
+            Form::Tablet,
+            Release::Standard,
+        );
+        let b = key(
+            &[Salt::mg("a", 2000), Salt::mg("b", 1000)],
+            Form::Tablet,
+            Release::Standard,
+        );
         assert_eq!(a, b);
         assert_eq!(a.unwrap().as_str(), "tablet|standard|a:2mg+b:1mg|unit");
     }
@@ -57,14 +72,30 @@ mod tests {
         let base = key(&s, Form::Tablet, Release::Standard);
         assert_ne!(base, key(&s, Form::Tablet, Release::Extended));
         assert_ne!(base, key(&s, Form::Capsule, Release::Standard));
-        assert_ne!(base, MatchKey::new(&s, Form::Tablet, Release::Standard, PackUnit::Ml));
+        assert_ne!(
+            base,
+            MatchKey::new(&s, Form::Tablet, Release::Standard, PackUnit::Ml)
+        );
     }
 
     #[test]
     fn no_key_when_any_strength_is_unknown() {
-        assert_eq!(key(&[Salt { name: "a".into(), strength: None }], Form::Tablet, Release::Standard), None);
+        assert_eq!(
+            key(
+                &[Salt {
+                    name: "a".into(),
+                    strength: None
+                }],
+                Form::Tablet,
+                Release::Standard
+            ),
+            None
+        );
         assert_eq!(key(&[], Form::Tablet, Release::Standard), None);
-        let text = Salt { name: "a".into(), strength: Some(Strength::Text("5mg/5ml".into())) };
+        let text = Salt {
+            name: "a".into(),
+            strength: Some(Strength::Text("5mg/5ml".into())),
+        };
         assert!(key(&[text], Form::Liquid, Release::Standard).is_some());
     }
 

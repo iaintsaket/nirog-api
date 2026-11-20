@@ -41,7 +41,11 @@ pub struct GoogleConfig {
 
 impl GoogleConfig {
     /// Google's production endpoints.
-    pub fn new(client_id: String, client_secret: Secret, redirect_uri: String) -> Result<Self, url::ParseError> {
+    pub fn new(
+        client_id: String,
+        client_secret: Secret,
+        redirect_uri: String,
+    ) -> Result<Self, url::ParseError> {
         Ok(Self {
             client_id,
             client_secret,
@@ -131,7 +135,10 @@ impl IdentityProvider for GoogleIdentityProvider {
         if !res.status().is_success() {
             return Err(classify(res.status(), "token exchange"));
         }
-        let token: TokenResponse = res.json().await.map_err(|_| IdentityError::Unavailable("bad token response".into()))?;
+        let token: TokenResponse = res
+            .json()
+            .await
+            .map_err(|_| IdentityError::Unavailable("bad token response".into()))?;
 
         let res = self
             .http
@@ -143,13 +150,24 @@ impl IdentityProvider for GoogleIdentityProvider {
         if !res.status().is_success() {
             return Err(classify(res.status(), "userinfo"));
         }
-        let info: UserInfo = res.json().await.map_err(|_| IdentityError::Unavailable("bad userinfo response".into()))?;
-        let email = info.email.filter(|_| info.email_verified).ok_or_else(|| IdentityError::Rejected("email not verified".into()))?;
+        let info: UserInfo = res
+            .json()
+            .await
+            .map_err(|_| IdentityError::Unavailable("bad userinfo response".into()))?;
+        let email = info
+            .email
+            .filter(|_| info.email_verified)
+            .ok_or_else(|| IdentityError::Rejected("email not verified".into()))?;
         if info.sub.is_empty() || info.sub.len() > 255 {
             return Err(IdentityError::Rejected("bad subject".into()));
         }
         let name = info.name.unwrap_or_default().chars().take(200).collect();
-        Ok(Identity { provider: PROVIDER, subject: info.sub, email, name })
+        Ok(Identity {
+            provider: PROVIDER,
+            subject: info.sub,
+            email,
+            name,
+        })
     }
 }
 
@@ -179,7 +197,10 @@ mod tests {
             .and(path("/token"))
             .and(body_string_contains("code_verifier=ver"))
             .and(body_string_contains("grant_type=authorization_code"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"access_token": "at", "id_token": "x"})))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(json!({"access_token": "at", "id_token": "x"})),
+            )
             .mount(server)
             .await;
     }
@@ -196,7 +217,8 @@ mod tests {
     #[tokio::test]
     async fn authorize_url_carries_pkce_and_state() {
         let server = MockServer::start().await;
-        let url = Url::parse(&provider(&server).authorize_url("st", "ch")).unwrap_or_else(|_| unreachable!());
+        let url = Url::parse(&provider(&server).authorize_url("st", "ch"))
+            .unwrap_or_else(|_| unreachable!());
         let q: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
         assert_eq!(q["state"], "st");
         assert_eq!(q["code_challenge"], "ch");
@@ -208,9 +230,22 @@ mod tests {
     async fn exchange_returns_verified_identity() -> Result<(), IdentityError> {
         let server = MockServer::start().await;
         token_ok(&server).await;
-        userinfo(&server, 200, json!({"sub": "123", "email": "a@example.com", "email_verified": true, "name": "Asha"})).await;
+        userinfo(
+            &server,
+            200,
+            json!({"sub": "123", "email": "a@example.com", "email_verified": true, "name": "Asha"}),
+        )
+        .await;
         let id = provider(&server).exchange("code", "ver").await?;
-        assert_eq!(id, Identity { provider: "google", subject: "123".into(), email: "a@example.com".into(), name: "Asha".into() });
+        assert_eq!(
+            id,
+            Identity {
+                provider: "google",
+                subject: "123".into(),
+                email: "a@example.com".into(),
+                name: "Asha".into()
+            }
+        );
         Ok(())
     }
 
@@ -218,18 +253,39 @@ mod tests {
     async fn unverified_email_is_rejected() {
         let server = MockServer::start().await;
         token_ok(&server).await;
-        userinfo(&server, 200, json!({"sub": "123", "email": "a@example.com", "email_verified": false})).await;
-        assert!(matches!(provider(&server).exchange("code", "ver").await, Err(IdentityError::Rejected(_))));
+        userinfo(
+            &server,
+            200,
+            json!({"sub": "123", "email": "a@example.com", "email_verified": false}),
+        )
+        .await;
+        assert!(matches!(
+            provider(&server).exchange("code", "ver").await,
+            Err(IdentityError::Rejected(_))
+        ));
     }
 
     #[tokio::test]
     async fn token_errors_are_classified() {
         let server = MockServer::start().await;
-        Mock::given(path("/token")).respond_with(ResponseTemplate::new(400)).up_to_n_times(1).mount(&server).await;
+        Mock::given(path("/token"))
+            .respond_with(ResponseTemplate::new(400))
+            .up_to_n_times(1)
+            .mount(&server)
+            .await;
         let p = provider(&server);
-        assert!(matches!(p.exchange("bad", "ver").await, Err(IdentityError::Rejected(_))));
-        Mock::given(path("/token")).respond_with(ResponseTemplate::new(503)).mount(&server).await;
-        assert!(matches!(p.exchange("c", "ver").await, Err(IdentityError::Unavailable(_))));
+        assert!(matches!(
+            p.exchange("bad", "ver").await,
+            Err(IdentityError::Rejected(_))
+        ));
+        Mock::given(path("/token"))
+            .respond_with(ResponseTemplate::new(503))
+            .mount(&server)
+            .await;
+        assert!(matches!(
+            p.exchange("c", "ver").await,
+            Err(IdentityError::Unavailable(_))
+        ));
     }
 
     #[tokio::test]
@@ -237,12 +293,18 @@ mod tests {
         let server = MockServer::start().await;
         token_ok(&server).await;
         userinfo(&server, 500, json!({})).await;
-        assert!(matches!(provider(&server).exchange("c", "ver").await, Err(IdentityError::Unavailable(_))));
+        assert!(matches!(
+            provider(&server).exchange("c", "ver").await,
+            Err(IdentityError::Unavailable(_))
+        ));
 
         let server = MockServer::start().await;
         token_ok(&server).await;
         userinfo(&server, 200, json!({"nope": 1})).await;
-        assert!(matches!(provider(&server).exchange("c", "ver").await, Err(IdentityError::Unavailable(_))));
+        assert!(matches!(
+            provider(&server).exchange("c", "ver").await,
+            Err(IdentityError::Unavailable(_))
+        ));
     }
 
     #[test]

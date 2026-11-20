@@ -36,7 +36,10 @@ mod tests {
         let b = random_token().unwrap();
         assert_ne!(a, b);
         assert_eq!(a.len(), 43);
-        assert!(a.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_'));
+        assert!(
+            a.bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
+        );
     }
 
     #[test]

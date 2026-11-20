@@ -1,0 +1,717 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Nirog API",
+    "description": "Find cheaper exact substitutes for Indian medicines.",
+    "license": {
+      "name": "MIT",
+      "identifier": "MIT"
+    },
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/v1/auth/google/callback": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Google redirects here. On success sets the session cookie and returns to the website.",
+        "operationId": "callback",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "state",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "error",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "Back to the website, signed in or with ?error="
+          }
+        }
+      }
+    },
+    "/v1/auth/google/start": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Starts Google sign-in. Binds the OAuth `state` to this browser with a short-lived cookie.",
+        "operationId": "start",
+        "responses": {
+          "303": {
+            "description": "Redirect to Google"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "logout",
+        "responses": {
+          "204": {},
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/compare": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "operationId": "compare",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "description": "Match key from a search group.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "searched",
+            "in": "path",
+            "description": "Offer id the user searched for, to compute the saving against it.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComparisonResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/health": {
+      "get": {
+        "tags": [
+          "routes"
+        ],
+        "summary": "Liveness check. Exempt from the proxy secret so the platform can probe it.",
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "me",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Deletes the account, its sessions and saved matches (DPDP right to erasure).",
+        "operationId": "delete_me",
+        "responses": {
+          "204": {},
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/saved": {
+      "get": {
+        "tags": [
+          "saved"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SavedMatchDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "saved"
+        ],
+        "summary": "Saves a match; saving the same key again updates its label.",
+        "operationId": "create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveMatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedMatchDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/saved/{id}": {
+      "delete": {
+        "tags": [
+          "saved"
+        ],
+        "operationId": "remove",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/search": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "operationId": "search",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "path",
+            "description": "Medicine or salt name, 2 to 100 characters.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BuyLinkDto": {
+        "type": "object",
+        "required": [
+          "label",
+          "url",
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/LinkKindDto"
+          },
+          "label": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      },
+      "ComparedOffer": {
+        "type": "object",
+        "required": [
+          "offer",
+          "links"
+        ],
+        "properties": {
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BuyLinkDto"
+            }
+          },
+          "offer": {
+            "$ref": "#/components/schemas/OfferDto"
+          }
+        }
+      },
+      "ComparisonResponse": {
+        "type": "object",
+        "required": [
+          "key",
+          "offers",
+          "saving_per_pack_paise",
+          "saving_bps"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "offers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComparedOffer"
+            },
+            "description": "Cheapest per unit first."
+          },
+          "saving_bps": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Saving in basis points (1/100 of a percent)."
+          },
+          "saving_per_pack_paise": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Saving per pack of the searched (or costliest) offer when buying the cheapest, in paise."
+          },
+          "searched_index": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Index into `offers` of the medicine the user searched for, if known.",
+            "minimum": 0
+          }
+        }
+      },
+      "ErrorBody": {
+        "type": "object",
+        "required": [
+          "error",
+          "message"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Stable machine-readable code: `not_found`, `unauthorized`, `invalid`, `limit`, `forbidden`, ..."
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "Health": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "LinkKindDto": {
+        "type": "string",
+        "enum": [
+          "store",
+          "online"
+        ]
+      },
+      "OfferDto": {
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "name",
+          "manufacturer",
+          "price_paise",
+          "pack_count",
+          "pack_unit",
+          "unit_price_millipaise",
+          "salts_label"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "manufacturer": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pack_count": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "pack_unit": {
+            "$ref": "#/components/schemas/Unit"
+          },
+          "price_paise": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Pack price (MRP) in paise."
+          },
+          "salts_label": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "unit_price_millipaise": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Price of one unit (tablet, ml or g) in thousandths of a paisa."
+          }
+        }
+      },
+      "SaveMatchRequest": {
+        "type": "object",
+        "required": [
+          "key",
+          "label"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string",
+            "description": "1 to 120 characters."
+          },
+          "offer_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The offer the user was looking at when saving, if any."
+          }
+        },
+        "additionalProperties": false
+      },
+      "SavedMatchDto": {
+        "type": "object",
+        "required": [
+          "id",
+          "key",
+          "label",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "offer_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "SearchGroupDto": {
+        "type": "object",
+        "required": [
+          "key",
+          "salts_label",
+          "matched"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Exact-substitution key; pass it to `/v1/compare`."
+          },
+          "matched": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OfferDto"
+            }
+          },
+          "salts_label": {
+            "type": "string"
+          }
+        }
+      },
+      "SearchResponse": {
+        "type": "object",
+        "required": [
+          "groups"
+        ],
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchGroupDto"
+            }
+          }
+        }
+      },
+      "Source": {
+        "type": "string",
+        "enum": [
+          "jan_aushadhi",
+          "brand"
+        ]
+      },
+      "Unit": {
+        "type": "string",
+        "enum": [
+          "unit",
+          "ml",
+          "g"
+        ]
+      },
+      "UserDto": {
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "name"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "catalog"
+    },
+    {
+      "name": "auth"
+    },
+    {
+      "name": "saved"
+    }
+  ]
+}

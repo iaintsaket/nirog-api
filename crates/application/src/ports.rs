@@ -30,16 +30,34 @@ pub trait UserRepository: Send + Sync {
 
 #[async_trait]
 pub trait SessionRepository: Send + Sync {
-    async fn create(&self, hash: &TokenHash, user: UserId, expires_at: DateTime<Utc>) -> Result<(), RepoError>;
-    async fn user_for(&self, hash: &TokenHash, now: DateTime<Utc>) -> Result<Option<UserId>, RepoError>;
+    async fn create(
+        &self,
+        hash: &TokenHash,
+        user: UserId,
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), RepoError>;
+    async fn user_for(
+        &self,
+        hash: &TokenHash,
+        now: DateTime<Utc>,
+    ) -> Result<Option<UserId>, RepoError>;
     async fn delete(&self, hash: &TokenHash) -> Result<(), RepoError>;
 }
 
 /// Short-lived OAuth `state` → PKCE verifier store. `take` is single-use.
 #[async_trait]
 pub trait LoginStateRepository: Send + Sync {
-    async fn put(&self, state: &TokenHash, pkce_verifier: &str, expires_at: DateTime<Utc>) -> Result<(), RepoError>;
-    async fn take(&self, state: &TokenHash, now: DateTime<Utc>) -> Result<Option<String>, RepoError>;
+    async fn put(
+        &self,
+        state: &TokenHash,
+        pkce_verifier: &str,
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), RepoError>;
+    async fn take(
+        &self,
+        state: &TokenHash,
+        now: DateTime<Utc>,
+    ) -> Result<Option<String>, RepoError>;
 }
 
 #[async_trait]
