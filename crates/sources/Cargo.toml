@@ -12,6 +12,7 @@ nirog-domain.workspace = true
 nirog-application.workspace = true
 csv.workspace = true
 serde.workspace = true
+time.workspace = true
 
 [lints]
 workspace = true

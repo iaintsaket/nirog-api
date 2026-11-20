@@ -202,11 +202,71 @@ impl Offer {
     pub fn unit_price_millipaise(&self) -> i64 {
         self.price.0 * 1000 / i64::from(self.pack.count.max(1))
     }
+
+    /// The same product as listed by different sources: source kind, name, maker
+    /// and pack, ignoring case, spacing and punctuation.
+    pub fn identity(&self) -> String {
+        let norm = |s: &str| {
+            s.to_lowercase()
+                .split(|c: char| !c.is_alphanumeric())
+                .filter(|w| !w.is_empty())
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        format!(
+            "{}|{}|{}|{}{}",
+            self.source.as_str(),
+            norm(&self.name),
+            norm(&self.manufacturer),
+            self.pack.count,
+            self.pack.unit.as_str()
+        )
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn identity_ignores_case_spacing_and_punctuation_but_not_pack_or_source() {
+        let pack = Pack {
+            count: 15,
+            unit: PackUnit::Unit,
+        };
+        let key = MatchKey::parse("paracetamol:650000000|tablet|standard|unit")
+            .unwrap_or_else(|| unreachable!());
+        let o = |source, name: &str, maker: &str, count| Offer {
+            id: OfferId("x".into()),
+            source,
+            name: name.into(),
+            manufacturer: maker.into(),
+            price: Paise(100),
+            pack: Pack { count, ..pack },
+            key: key.clone(),
+            salts_label: String::new(),
+        };
+        let a = o(SourceKind::Brand, "Dolo 650 Tablet", "Micro Labs Ltd", 15);
+        assert_eq!(a.identity(), "brand|dolo 650 tablet|micro labs ltd|15unit");
+        assert_eq!(
+            o(SourceKind::Brand, "DOLO-650  tablet", "Micro Labs Ltd.", 15).identity(),
+            a.identity()
+        );
+        assert_ne!(
+            o(SourceKind::Brand, "Dolo 650 Tablet", "Micro Labs Ltd", 10).identity(),
+            a.identity()
+        );
+        assert_ne!(
+            o(
+                SourceKind::JanAushadhi,
+                "Dolo 650 Tablet",
+                "Micro Labs Ltd",
+                15
+            )
+            .identity(),
+            a.identity()
+        );
+    }
 
     #[test]
     fn parses_rupees_into_paise() {

@@ -3,7 +3,7 @@
 
 use async_trait::async_trait;
 use nirog_domain::{MatchKey, Offer, SourceKind};
-use time::OffsetDateTime;
+use time::{Date, OffsetDateTime};
 use uuid::Uuid;
 
 use crate::error::{IdentityError, RepoError};
@@ -18,8 +18,10 @@ pub trait OfferRepository: Send + Sync {
     async fn closest_names(&self, query: &str, limit: u32) -> Result<Vec<String>, RepoError>;
     async fn by_key(&self, key: &MatchKey) -> Result<Vec<Offer>, RepoError>;
     async fn key_exists(&self, key: &MatchKey) -> Result<bool, RepoError>;
-    /// Atomically replace every offer from `source` with `offers`.
-    async fn replace_source(&self, source: SourceKind, offers: &[Offer]) -> Result<u64, RepoError>;
+    /// Atomically add `offers` as prices seen by `source` on its date, then
+    /// refresh the offers served to users (the newest price per product).
+    /// Products are never deleted, so the catalogue grows with every source.
+    async fn record(&self, source: &SourceInfo, offers: &[Offer]) -> Result<u64, RepoError>;
 }
 
 #[async_trait]
@@ -99,9 +101,21 @@ pub trait SellerLinks: Send + Sync {
 #[error("price source failed: {0}")]
 pub struct SourceError(pub String);
 
+/// One dataset of prices, such as "brands-2022" or a Jan Aushadhi list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceInfo {
+    /// Stable id, e.g. `brands-2022`; re-importing the same id updates its prices.
+    pub id: String,
+    pub kind: SourceKind,
+    pub title: String,
+    pub url: Option<String>,
+    /// The date the prices were collected; the newest price per product wins.
+    pub observed_on: Date,
+}
+
 /// A feed of offers from one source (a CSV today; AMRIT, NPPA or a partner API later).
 pub trait PriceSource: Send + Sync {
-    fn kind(&self) -> SourceKind;
+    fn info(&self) -> SourceInfo;
     /// Returns parsed offers and how many input rows were skipped as unusable.
     fn load(&self) -> Result<(Vec<Offer>, usize), SourceError>;
 }

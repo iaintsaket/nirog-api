@@ -4,13 +4,14 @@
 use std::io::Read;
 use std::path::PathBuf;
 
-use nirog_application::ports::{PriceSource, SourceError};
+use nirog_application::ports::{PriceSource, SourceError, SourceInfo};
 use nirog_domain::parse::{
     describe_salts, detect_form, detect_release, parse_brand_composition, parse_brand_pack,
     parse_jan_aushadhi_name, parse_jan_aushadhi_pack,
 };
 use nirog_domain::{MatchKey, Offer, OfferId, Pack, Paise, Salt, SourceKind};
 use serde::Deserialize;
+use time::macros::date;
 
 /// One source row after field extraction, before validation.
 struct Raw<'a> {
@@ -120,8 +121,15 @@ impl JanAushadhiCsv {
 }
 
 impl PriceSource for JanAushadhiCsv {
-    fn kind(&self) -> SourceKind {
-        SourceKind::JanAushadhi
+    fn info(&self) -> SourceInfo {
+        SourceInfo {
+            id: "jan-aushadhi".into(),
+            kind: SourceKind::JanAushadhi,
+            title: "Jan Aushadhi product list".into(),
+            url: Some("https://janaushadhi.gov.in/".into()),
+            // When the bundled list was taken; update it with the file.
+            observed_on: date!(2026 - 11 - 20),
+        }
     }
     fn load(&self) -> Result<(Vec<Offer>, usize), SourceError> {
         Self::parse(open(&self.path)?)
@@ -185,8 +193,14 @@ impl BrandDatasetCsv {
 }
 
 impl PriceSource for BrandDatasetCsv {
-    fn kind(&self) -> SourceKind {
-        SourceKind::Brand
+    fn info(&self) -> SourceInfo {
+        SourceInfo {
+            id: "brands-2022".into(),
+            kind: SourceKind::Brand,
+            title: "Indian Medicine Dataset (Nov 2022)".into(),
+            url: Some("https://github.com/junioralive/Indian-Medicine-Dataset".into()),
+            observed_on: date!(2022 - 11 - 17),
+        }
     }
     fn load(&self) -> Result<(Vec<Offer>, usize), SourceError> {
         Self::parse(open(&self.path)?)
@@ -253,6 +267,10 @@ mod tests {
     #[test]
     fn missing_file_is_an_error() {
         assert!(JanAushadhiCsv::new("/no/such/file.csv").load().is_err());
-        assert_eq!(BrandDatasetCsv::new("x").kind(), SourceKind::Brand);
+        assert_eq!(BrandDatasetCsv::new("x").info().kind, SourceKind::Brand);
+        assert_eq!(
+            JanAushadhiCsv::new("x").info().kind,
+            SourceKind::JanAushadhi
+        );
     }
 }

@@ -9,7 +9,7 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use http_body_util::BodyExt;
-use nirog_application::ports::{IdentityProvider, OfferRepository, SystemClock};
+use nirog_application::ports::{IdentityProvider, OfferRepository, SourceInfo, SystemClock};
 use nirog_application::sellers::DefaultSellerLinks;
 use nirog_application::services::{AuthService, CatalogService, SavedMatchService};
 use nirog_application::{Identity, IdentityError};
@@ -82,8 +82,14 @@ fn config() -> HttpConfig {
 async fn app_with(pool: PgPool, config: HttpConfig) -> Router {
     let offers = Arc::new(PgOfferRepository::new(pool.clone()));
     offers
-        .replace_source(
-            SourceKind::JanAushadhi,
+        .record(
+            &SourceInfo {
+                id: "jan-aushadhi".into(),
+                kind: SourceKind::JanAushadhi,
+                title: "jan-aushadhi".into(),
+                url: None,
+                observed_on: time::macros::date!(2026 - 11 - 20),
+            },
             &[offer(
                 "ja:1",
                 SourceKind::JanAushadhi,
@@ -95,8 +101,14 @@ async fn app_with(pool: PgPool, config: HttpConfig) -> Router {
         .await
         .unwrap();
     offers
-        .replace_source(
-            SourceKind::Brand,
+        .record(
+            &SourceInfo {
+                id: "brands-2022".into(),
+                kind: SourceKind::Brand,
+                title: "brands-2022".into(),
+                url: None,
+                observed_on: time::macros::date!(2022 - 11 - 17),
+            },
             &[offer(
                 "brand:1",
                 SourceKind::Brand,
