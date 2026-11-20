@@ -2,7 +2,7 @@
 //! only on purpose; every type here appears in the OpenAPI document.
 
 use nirog_application::services::catalog::ComparisonView;
-use nirog_application::{BuyLink, LinkKind, SavedMatch, SearchGroup, User};
+use nirog_application::{BrandAlias, BuyLink, LinkKind, SavedMatch, SearchGroup, User};
 use nirog_domain::{Offer, PackUnit, SourceKind};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -99,6 +99,28 @@ pub struct SearchResponse {
     pub groups: Vec<SearchGroupDto>,
     /// When nothing matched: the closest medicine or salt names, best first.
     pub did_you_mean: Vec<String>,
+    /// Set when the query names a brand we have no price for (e.g. Disprin):
+    /// `groups` then lists medicines with the same salt, exact strength first.
+    pub same_salt_as: Option<BrandAliasDto>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct BrandAliasDto {
+    pub brand: String,
+    /// The brand's salts and strengths, e.g. "Aspirin 350mg".
+    pub salts_label: String,
+    /// Exact-substitution key of the brand itself; a group with this key is an exact match.
+    pub key: String,
+}
+
+impl From<&BrandAlias> for BrandAliasDto {
+    fn from(a: &BrandAlias) -> Self {
+        Self {
+            brand: a.brand.clone(),
+            salts_label: a.salts_label.clone(),
+            key: a.key.as_str().to_owned(),
+        }
+    }
 }
 
 impl From<Vec<SearchGroup>> for SearchResponse {
@@ -113,6 +135,7 @@ impl From<Vec<SearchGroup>> for SearchResponse {
                 })
                 .collect(),
             did_you_mean: Vec::new(),
+            same_salt_as: None,
         }
     }
 }

@@ -4,7 +4,9 @@ use axum::http::header;
 use axum::response::IntoResponse;
 
 use crate::AppState;
-use crate::dto::{CompareParams, ComparisonResponse, ErrorBody, SearchParams, SearchResponse};
+use crate::dto::{
+    BrandAliasDto, CompareParams, ComparisonResponse, ErrorBody, SearchParams, SearchResponse,
+};
 use crate::error::ApiError;
 
 /// Public catalogue data: cacheable for 5 minutes.
@@ -19,7 +21,12 @@ pub async fn search(
     let groups = s.catalog.search(&p.q).await?;
     let mut body = SearchResponse::from(groups);
     if body.groups.is_empty() {
-        body.did_you_mean = s.catalog.closest(&p.q).await?;
+        if let Some((alias, groups)) = s.catalog.same_salt_as_brand(&p.q).await? {
+            body = SearchResponse::from(groups);
+            body.same_salt_as = Some(BrandAliasDto::from(&alias));
+        } else {
+            body.did_you_mean = s.catalog.closest(&p.q).await?;
+        }
     }
     Ok(([CACHE], Json(body)))
 }

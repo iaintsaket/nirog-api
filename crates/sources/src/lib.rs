@@ -1,6 +1,8 @@
 //! Price sources. Each one turns a raw feed into domain offers and counts the
 //! rows it had to skip (no price, no pack size, or a strength it cannot read).
 
+pub mod aliases;
+
 use std::io::Read;
 use std::path::PathBuf;
 

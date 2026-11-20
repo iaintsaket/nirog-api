@@ -3,8 +3,8 @@ use std::sync::Arc;
 use nirog_domain::{Comparison, MatchKey, OfferId};
 
 use crate::error::AppError;
-use crate::model::{BuyLink, SearchGroup};
-use crate::ports::{OfferRepository, SellerLinks};
+use crate::model::{BrandAlias, BuyLink, SearchGroup};
+use crate::ports::{BrandAliases, OfferRepository, SellerLinks};
 
 pub const MIN_QUERY: usize = 2;
 pub const MAX_QUERY: usize = 100;
@@ -28,6 +28,7 @@ pub struct ComparisonView {
 pub struct CatalogService {
     offers: Arc<dyn OfferRepository>,
     sellers: Arc<dyn SellerLinks>,
+    aliases: Arc<dyn BrandAliases>,
 }
 
 impl std::fmt::Debug for CatalogService {
@@ -37,8 +38,33 @@ impl std::fmt::Debug for CatalogService {
 }
 
 impl CatalogService {
-    pub fn new(offers: Arc<dyn OfferRepository>, sellers: Arc<dyn SellerLinks>) -> Self {
-        Self { offers, sellers }
+    pub fn new(
+        offers: Arc<dyn OfferRepository>,
+        sellers: Arc<dyn SellerLinks>,
+        aliases: Arc<dyn BrandAliases>,
+    ) -> Self {
+        Self {
+            offers,
+            sellers,
+            aliases,
+        }
+    }
+
+    /// For a brand we have no price for (e.g. "Disprin"): the brand, and the
+    /// medicines with the same salt, the exact strength and form first.
+    pub async fn same_salt_as_brand(
+        &self,
+        query: &str,
+    ) -> Result<Option<(BrandAlias, Vec<SearchGroup>)>, AppError> {
+        let Some(alias) = self.aliases.find(query.trim()) else {
+            return Ok(None);
+        };
+        let mut groups = self.search(&alias.search).await?;
+        if let Some(i) = groups.iter().position(|g| g.key == alias.key) {
+            let exact = groups.remove(i);
+            groups.insert(0, exact);
+        }
+        Ok(Some((alias, groups)))
     }
 
     /// Matches grouped by exact-substitution key, in the repository's relevance order.
@@ -102,12 +128,72 @@ impl CatalogService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fakes::{FakeOffers, offer};
+    use crate::fakes::{FakeAliases, FakeOffers, key, offer};
+    use crate::model::BrandAlias;
     use crate::sellers::DefaultSellerLinks;
     use nirog_domain::SourceKind;
 
     fn service(offers: FakeOffers) -> CatalogService {
-        CatalogService::new(Arc::new(offers), Arc::new(DefaultSellerLinks))
+        CatalogService::new(
+            Arc::new(offers),
+            Arc::new(DefaultSellerLinks),
+            Arc::new(FakeAliases::default()),
+        )
+    }
+
+    #[tokio::test]
+    async fn missing_brand_shows_same_salt_with_exact_strength_first() {
+        let alias = |k: &str| BrandAlias {
+            brand: "Disprin".into(),
+            key: key(k),
+            salts_label: "Aspirin 350mg".into(),
+            search: "aspirin".into(),
+        };
+        let svc = |a| {
+            CatalogService::new(
+                Arc::new(FakeOffers::with(vec![])),
+                Arc::new(DefaultSellerLinks),
+                Arc::new(FakeAliases(vec![a])),
+            )
+        };
+        let with = |a| {
+            CatalogService::new(
+                Arc::new(FakeOffers::with(sample_aspirin())),
+                Arc::new(DefaultSellerLinks),
+                Arc::new(FakeAliases(vec![a])),
+            )
+        };
+
+        let (found, groups) = with(alias("aspirin350"))
+            .same_salt_as_brand("Disprin 350")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(found.brand, "Disprin");
+        let keys: Vec<_> = groups.iter().map(|g| g.key.clone()).collect();
+        assert_eq!(keys, [key("aspirin350"), key("aspirin")]);
+        // Not a known brand, or a known brand with no priced medicine yet.
+        assert!(
+            with(alias("aspirin350"))
+                .same_salt_as_brand("dolo")
+                .await
+                .unwrap()
+                .is_none()
+        );
+        let (_, none) = svc(alias("aspirin350"))
+            .same_salt_as_brand("disprin")
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(none.is_empty());
+    }
+
+    fn sample_aspirin() -> Vec<nirog_domain::Offer> {
+        vec![
+            offer("b1", SourceKind::Brand, "Ecosprin 75", 100, "aspirin"),
+            offer("b2", SourceKind::Brand, "Aspent 350", 200, "aspirin350"),
+            offer("b3", SourceKind::Brand, "Dolo 650", 300, "paracetamol"),
+        ]
     }
 
     fn sample() -> FakeOffers {
