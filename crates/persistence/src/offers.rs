@@ -46,27 +46,49 @@ fn to_offer(row: &PgRow) -> Result<Offer, RepoError> {
     })
 }
 
+/// Queries shorter than this match the start of a name or salt only: an infix
+/// match on two letters is noisy and cannot use the trigram index.
+const PREFIX_ONLY_BELOW: usize = 3;
+
 /// Escapes LIKE wildcards so user input is matched literally.
 fn like_pattern(query: &str) -> String {
     let escaped = query
         .replace('\\', "\\\\")
         .replace('%', "\\%")
-        .replace('_', "\\_");
-    format!("%{}%", escaped.to_lowercase())
+        .replace('_', "\\_")
+        .to_lowercase();
+    if query.chars().count() < PREFIX_ONLY_BELOW {
+        format!("{escaped}%")
+    } else {
+        format!("%{escaped}%")
+    }
 }
 
 #[async_trait]
 impl OfferRepository for PgOfferRepository {
     async fn search(&self, query: &str, limit: u32) -> Result<Vec<Offer>, RepoError> {
-        let sql = select_offers!(
-            "WHERE lower(name) LIKE $1 OR lower(salts_label) LIKE $1
-             ORDER BY greatest(similarity(lower(name), $2), similarity(lower(salts_label), $2)) DESC,
-                      unit_price_millipaise, id
-             LIMIT $3"
-        );
-        let rows = sqlx::query(sql)
-            .bind(like_pattern(query))
-            .bind(query.to_lowercase())
+        // Trigram similarity means little for two letters, so short queries rank
+        // brand-name hits first, shortest name first ("Dolo 650" before "Dolokind Plus").
+        let short = query.chars().count() < PREFIX_ONLY_BELOW;
+        let sql = if short {
+            select_offers!(
+                "WHERE lower(name) LIKE $1 OR lower(salts_label) LIKE $1
+                 ORDER BY (lower(name) LIKE $1) DESC, length(name), unit_price_millipaise, id
+                 LIMIT $2"
+            )
+        } else {
+            select_offers!(
+                "WHERE lower(name) LIKE $1 OR lower(salts_label) LIKE $1
+                 ORDER BY greatest(similarity(lower(name), $2), similarity(lower(salts_label), $2)) DESC,
+                          unit_price_millipaise, id
+                 LIMIT $3"
+            )
+        };
+        let mut q = sqlx::query(sql).bind(like_pattern(query));
+        if !short {
+            q = q.bind(query.to_lowercase());
+        }
+        let rows = q
             .bind(i64::from(limit))
             .fetch_all(&self.pool)
             .await
@@ -217,6 +239,9 @@ mod tests {
         assert_eq!(repo.search("DOLO", 10).await?, vec![dolo.clone()]);
         assert_eq!(repo.search("paracetamol", 1).await?.len(), 1);
         assert!(repo.search("100%", 10).await?.is_empty());
+        // Two-letter queries match the start of a name or salt only.
+        assert_eq!(repo.search("do", 10).await?, vec![dolo.clone()]);
+        assert!(repo.search("ol", 10).await?.is_empty());
         // Cheapest per unit first: JA 150 paise/tab beats Dolo ~227.
         assert_eq!(
             repo.by_key(&dolo.key).await?,
