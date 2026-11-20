@@ -85,3 +85,18 @@ pub struct CatalogStats {
     /// Date of the newest price list.
     pub prices_updated_on: Option<time::Date>,
 }
+
+/// One formula near yours: its key, cheapest offer and how many offers it has.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NearbyGroup {
+    pub key: nirog_domain::MatchKey,
+    pub cheapest: nirog_domain::Offer,
+    pub offers: u64,
+}
+
+/// A nearby formula and exactly how it differs from yours. Never an exact substitute.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CloseMatch {
+    pub group: NearbyGroup,
+    pub differences: Vec<nirog_domain::Difference>,
+}

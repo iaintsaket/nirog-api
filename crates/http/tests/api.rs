@@ -11,7 +11,9 @@ use axum::http::{Request, StatusCode, header};
 use http_body_util::BodyExt;
 use nirog_application::ports::{IdentityProvider, OfferRepository, SourceInfo, SystemClock};
 use nirog_application::sellers::DefaultSellerLinks;
-use nirog_application::services::{AuthService, CatalogService, SavedMatchService, StatsService};
+use nirog_application::services::{
+    AuthService, CatalogService, CloseMatchService, SavedMatchService, StatsService,
+};
 use nirog_application::{Identity, IdentityError};
 use nirog_domain::parse::{describe_salts, detect_form, detect_release};
 use nirog_domain::{MatchKey, Offer, OfferId, Pack, PackUnit, Paise, Salt, SourceKind};
@@ -134,7 +136,11 @@ async fn app_with(pool: PgPool, config: HttpConfig) -> Router {
             Arc::new(SystemClock),
             time::Duration::days(30),
         ),
-        saved: SavedMatchService::new(Arc::new(PgSavedMatchRepository::new(pool.clone())), offers),
+        saved: SavedMatchService::new(
+            Arc::new(PgSavedMatchRepository::new(pool.clone())),
+            offers.clone(),
+        ),
+        close: CloseMatchService::new(offers.clone()),
         stats: StatsService::new(
             Arc::new(PgStatsRepository::new(pool)),
             Arc::new(SystemClock),
@@ -656,4 +662,65 @@ async fn stats_sum_up_the_price_data(pool: PgPool) {
             "prices_updated_on": "2026-11-20"
         })
     );
+}
+
+#[sqlx::test(migrator = "nirog_persistence::MIGRATOR")]
+async fn close_matches_say_what_differs(pool: PgPool) {
+    let app = app_with(pool.clone(), config()).await;
+    // A 500mg paracetamol: one strength away from the seeded 650mg medicines.
+    let salts = [Salt::mg("paracetamol", 500_000)];
+    let mut o = offer(
+        "brand:500",
+        SourceKind::Brand,
+        "Calpol 500 Tablet",
+        1500,
+        15,
+    );
+    o.key = MatchKey::new(
+        &salts,
+        detect_form("tablet"),
+        detect_release("tablet"),
+        PackUnit::Unit,
+    )
+    .unwrap();
+    o.salts_label = describe_salts(&salts);
+    PgOfferRepository::new(pool)
+        .record(
+            &SourceInfo {
+                id: "extra".into(),
+                kind: SourceKind::Brand,
+                title: "extra".into(),
+                url: None,
+                observed_on: time::macros::date!(2026 - 11 - 20),
+            },
+            &[o],
+        )
+        .await
+        .unwrap();
+    let key = offer("x", SourceKind::Brand, "x", 1, 1).key;
+    let url = format!("/v1/close?key={}", urlencoding(key.as_str()));
+    let res = send(&app, get(&url)).await;
+    assert_eq!(res.status, StatusCode::OK);
+    let m = &res.json["matches"];
+    assert_eq!(m.as_array().map(Vec::len), Some(1));
+    assert_eq!(m[0]["cheapest"]["name"], "Calpol 500 Tablet");
+    assert_eq!(
+        m[0]["differences"],
+        json!(["Paracetamol 500mg instead of 650mg"])
+    );
+    assert_eq!(
+        send(&app, get("/v1/close?key=bad")).await.status,
+        StatusCode::BAD_REQUEST
+    );
+}
+
+fn urlencoding(s: &str) -> String {
+    s.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                (b as char).to_string()
+            }
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
 }

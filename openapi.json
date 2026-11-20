@@ -93,6 +93,45 @@
         }
       }
     },
+    "/v1/close": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "operationId": "close",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "query",
+            "description": "Match key of your medicine (from search or compare).",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloseResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/compare": {
       "get": {
         "tags": [
@@ -459,6 +498,55 @@
           },
           "url": {
             "type": "string"
+          }
+        }
+      },
+      "CloseMatchDto": {
+        "type": "object",
+        "required": [
+          "key",
+          "salts_label",
+          "offers",
+          "cheapest",
+          "differences"
+        ],
+        "properties": {
+          "cheapest": {
+            "$ref": "#/components/schemas/OfferDto"
+          },
+          "differences": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What differs from your medicine, in plain words, e.g. \"Capsaicin 0.025% instead of 0.01%\"."
+          },
+          "key": {
+            "type": "string"
+          },
+          "offers": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How many offers have this formula.",
+            "minimum": 0
+          },
+          "salts_label": {
+            "type": "string"
+          }
+        }
+      },
+      "CloseResponse": {
+        "type": "object",
+        "description": "Nearby formulas when there is no cheaper exact substitute. These are NOT substitutes.",
+        "required": [
+          "matches"
+        ],
+        "properties": {
+          "matches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CloseMatchDto"
+            }
           }
         }
       },

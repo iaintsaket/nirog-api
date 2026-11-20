@@ -7,9 +7,11 @@ pub mod compare;
 pub mod error;
 pub mod matching;
 pub mod model;
+pub mod nearby;
 pub mod parse;
 
 pub use compare::Comparison;
 pub use error::DomainError;
 pub use matching::MatchKey;
 pub use model::{Form, Offer, OfferId, Pack, PackUnit, Paise, Release, Salt, SourceKind, Strength};
+pub use nearby::{Difference, differences};
