@@ -260,17 +260,34 @@ impl OfferRepository for PgOfferRepository {
             .execute(&mut *tx)
             .await
             .map_err(db)?;
-        // Serve the newest price of every product. DELETE (not TRUNCATE) keeps
-        // the old rows readable by searches until this transaction commits.
+        // Serve the newest price of every product. Only offers that changed are
+        // written, so an import leaves no dead copy of the whole table behind
+        // (the database stays small). Searches see the old rows until commit.
         for step in [
-            "DELETE FROM offers",
-            "INSERT INTO offers (id, source, name, manufacturer, price_paise, pack_count, pack_unit,
-                                 unit_price_millipaise, match_key, salts_label)
-             SELECT DISTINCT ON (p.id) p.id, p.kind, p.name, p.manufacturer, o.price_paise,
-                    p.pack_count, p.pack_unit, o.price_paise * 1000 / p.pack_count,
+            "CREATE TEMP TABLE fresh ON COMMIT DROP AS
+             SELECT DISTINCT ON (p.id) p.id, p.kind AS source, p.name, p.manufacturer,
+                    o.price_paise, p.pack_count, p.pack_unit,
+                    o.price_paise * 1000 / p.pack_count AS unit_price_millipaise,
                     p.match_key, p.salts_label
              FROM products p JOIN price_observations o ON o.product_id = p.id
              ORDER BY p.id, o.observed_on DESC, o.imported_at DESC",
+            "DELETE FROM offers o WHERE NOT EXISTS (SELECT 1 FROM fresh f WHERE f.id = o.id)",
+            "INSERT INTO offers (id, source, name, manufacturer, price_paise, pack_count, pack_unit,
+                                 unit_price_millipaise, match_key, salts_label)
+             SELECT * FROM fresh
+             ON CONFLICT (id) DO UPDATE SET
+                 source = EXCLUDED.source, name = EXCLUDED.name,
+                 manufacturer = EXCLUDED.manufacturer, price_paise = EXCLUDED.price_paise,
+                 pack_count = EXCLUDED.pack_count, pack_unit = EXCLUDED.pack_unit,
+                 unit_price_millipaise = EXCLUDED.unit_price_millipaise,
+                 match_key = EXCLUDED.match_key, salts_label = EXCLUDED.salts_label,
+                 imported_at = now()
+             WHERE (offers.source, offers.name, offers.manufacturer, offers.price_paise,
+                    offers.pack_count, offers.pack_unit, offers.match_key, offers.salts_label)
+                   IS DISTINCT FROM
+                   (EXCLUDED.source, EXCLUDED.name, EXCLUDED.manufacturer, EXCLUDED.price_paise,
+                    EXCLUDED.pack_count, EXCLUDED.pack_unit, EXCLUDED.match_key,
+                    EXCLUDED.salts_label)",
         ] {
             sqlx::query(step).execute(&mut *tx).await.map_err(db)?;
         }
@@ -440,6 +457,34 @@ mod tests {
         // Re-importing the older list does not bring back its older price.
         repo.record(&old, std::slice::from_ref(&dolo)).await?;
         assert_eq!(repo.by_key(&dolo.key).await?, vec![expected]);
+        Ok(())
+    }
+
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn reimport_rewrites_only_changed_offers(pool: PgPool) -> Result<(), RepoError> {
+        // Rewriting every offer on each import leaves a dead copy of the whole table behind.
+        let versions = |pool: PgPool| async move {
+            sqlx::query_as::<_, (String, String)>("SELECT id, xmin::text FROM offers ORDER BY id")
+                .fetch_all(&pool)
+                .await
+                .map_err(db)
+        };
+        let repo = PgOfferRepository::new(pool.clone());
+        let ja_src = src("ja", SourceKind::JanAushadhi, date!(2026 - 11 - 20));
+        let a = offer("ja:1", SourceKind::JanAushadhi, "P 650", 1500, 10, 650);
+        let b = offer("ja:2", SourceKind::JanAushadhi, "P 500", 1200, 10, 500);
+        repo.record(&ja_src, &[a.clone(), b.clone()]).await?;
+        let before = versions(pool.clone()).await?;
+
+        let mut b_cheaper = b.clone();
+        b_cheaper.price = Paise(900);
+        repo.record(&ja_src, &[a.clone(), b_cheaper.clone()])
+            .await?;
+        let after = versions(pool.clone()).await?;
+        assert_eq!(after[0], before[0], "unchanged offer was rewritten");
+        assert_ne!(after[1], before[1], "changed offer was not rewritten");
+        assert_eq!(repo.by_key(&b.key).await?, vec![b_cheaper]);
+        assert_eq!(repo.by_key(&a.key).await?, vec![a]);
         Ok(())
     }
 
