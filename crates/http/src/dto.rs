@@ -237,12 +237,14 @@ pub struct SaveMatchRequest {
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct SearchParams {
     /// Medicine or salt name, 2 to 100 characters.
     pub q: String,
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct CompareParams {
     /// Match key from a search group.
     pub key: String,
@@ -251,6 +253,7 @@ pub struct CompareParams {
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct CallbackParams {
     pub code: Option<String>,
     pub state: Option<String>,

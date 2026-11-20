@@ -20,35 +20,26 @@
         "parameters": [
           {
             "name": "code",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "state",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           },
           {
             "name": "error",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           }
         ],
@@ -111,7 +102,7 @@
         "parameters": [
           {
             "name": "key",
-            "in": "path",
+            "in": "query",
             "description": "Match key from a search group.",
             "required": true,
             "schema": {
@@ -120,14 +111,11 @@
           },
           {
             "name": "searched",
-            "in": "path",
+            "in": "query",
             "description": "Offer id the user searched for, to compute the saving against it.",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           }
         ],
@@ -382,7 +370,7 @@
         "parameters": [
           {
             "name": "q",
-            "in": "path",
+            "in": "query",
             "description": "Medicine or salt name, 2 to 100 characters.",
             "required": true,
             "schema": {
