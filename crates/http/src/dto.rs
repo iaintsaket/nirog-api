@@ -313,6 +313,7 @@ impl From<nirog_application::model::CatalogStats> for StatsResponse {
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct CloseParams {
     /// Match key of your medicine (from search or compare).
     pub key: String,
