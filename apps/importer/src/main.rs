@@ -49,10 +49,11 @@ async fn main() -> Result<()> {
     for source in &sources {
         let report = import_source(source.as_ref(), &repo).await?;
         println!(
-            "{}: imported {}, skipped {}",
-            source.kind().as_str(),
+            "{}: recorded {}, skipped {}, duplicates {}",
+            source.info().id,
             report.imported,
-            report.skipped
+            report.skipped,
+            report.duplicates
         );
     }
     Ok(())

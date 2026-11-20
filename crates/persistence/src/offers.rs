@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use nirog_application::RepoError;
-use nirog_application::ports::OfferRepository;
+use nirog_application::ports::{OfferRepository, SourceInfo};
 use nirog_domain::{MatchKey, Offer, OfferId, Pack, PackUnit, Paise, SourceKind};
 use sqlx::{PgPool, Row, postgres::PgRow};
 
@@ -138,65 +138,143 @@ impl OfferRepository for PgOfferRepository {
             .map_err(db)
     }
 
-    async fn replace_source(&self, source: SourceKind, offers: &[Offer]) -> Result<u64, RepoError> {
+    async fn record(&self, source: &SourceInfo, offers: &[Offer]) -> Result<u64, RepoError> {
+        if let Some(o) = offers.iter().find(|o| o.source != source.kind) {
+            return Err(RepoError(format!(
+                "offer {} is not from {}",
+                o.id.0, source.id
+            )));
+        }
         let mut tx = self.pool.begin().await.map_err(db)?;
-        sqlx::query("DELETE FROM offers WHERE source = $1")
-            .bind(source.as_str())
-            .execute(&mut *tx)
-            .await
-            .map_err(db)?;
-        let mut inserted = 0;
+        sqlx::query(
+            "INSERT INTO sources (id, kind, title, url, observed_on) VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (id) DO UPDATE SET kind = EXCLUDED.kind, title = EXCLUDED.title,
+                 url = EXCLUDED.url, observed_on = EXCLUDED.observed_on, updated_at = now()",
+        )
+        .bind(&source.id)
+        .bind(source.kind.as_str())
+        .bind(&source.title)
+        .bind(&source.url)
+        .bind(source.observed_on)
+        .execute(&mut *tx)
+        .await
+        .map_err(db)?;
+        sqlx::query(
+            "CREATE TEMP TABLE incoming (
+                 id text, identity text, kind text, name text, manufacturer text,
+                 pack_count int, pack_unit text, match_key text, salts_label text, price_paise bigint
+             ) ON COMMIT DROP",
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(db)?;
         // Chunked UNNEST inserts: one round trip per 1,000 rows.
         for chunk in offers.chunks(1000) {
-            let mut cols: [Vec<String>; 6] = Default::default();
-            let (mut price, mut count, mut unit_price) = (Vec::new(), Vec::new(), Vec::new());
-            let mut unit = Vec::new();
+            let mut cols: [Vec<String>; 8] = Default::default();
+            let (mut count, mut price) = (Vec::new(), Vec::new());
             for o in chunk {
-                if o.source != source {
-                    return Err(RepoError(format!(
-                        "offer {} is not from {}",
-                        o.id.0,
-                        source.as_str()
-                    )));
-                }
                 cols[0].push(o.id.0.clone());
-                cols[1].push(o.source.as_str().to_owned());
-                cols[2].push(o.name.clone());
-                cols[3].push(o.manufacturer.clone());
-                cols[4].push(o.key.as_str().to_owned());
-                cols[5].push(o.salts_label.clone());
-                price.push(o.price.0);
+                cols[1].push(o.identity());
+                cols[2].push(o.source.as_str().to_owned());
+                cols[3].push(o.name.clone());
+                cols[4].push(o.manufacturer.clone());
+                cols[5].push(o.pack.unit.as_str().to_owned());
+                cols[6].push(o.key.as_str().to_owned());
+                cols[7].push(o.salts_label.clone());
                 count.push(
                     i32::try_from(o.pack.count)
                         .map_err(|_| RepoError("pack count too large".into()))?,
                 );
-                unit.push(o.pack.unit.as_str().to_owned());
-                unit_price.push(o.unit_price_millipaise());
+                price.push(o.price.0);
             }
-            let [ids, sources, names, makers, keys, labels] = cols;
-            let res = sqlx::query(
-                "INSERT INTO offers (id, source, name, manufacturer, match_key, salts_label,
-                                     price_paise, pack_count, pack_unit, unit_price_millipaise)
-                 SELECT * FROM UNNEST($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[],
-                                      $7::bigint[], $8::int[], $9::text[], $10::bigint[])",
+            let [ids, identities, kinds, names, makers, units, keys, labels] = cols;
+            sqlx::query(
+                "INSERT INTO incoming (id, identity, kind, name, manufacturer, pack_unit, match_key,
+                                       salts_label, pack_count, price_paise)
+                 SELECT * FROM UNNEST($1::text[], $2::text[], $3::text[], $4::text[], $5::text[],
+                                      $6::text[], $7::text[], $8::text[], $9::int[], $10::bigint[])",
             )
             .bind(ids)
-            .bind(sources)
+            .bind(identities)
+            .bind(kinds)
             .bind(names)
             .bind(makers)
+            .bind(units)
             .bind(keys)
             .bind(labels)
-            .bind(price)
             .bind(count)
-            .bind(unit)
-            .bind(unit_price)
+            .bind(price)
             .execute(&mut *tx)
             .await
             .map_err(db)?;
-            inserted += res.rows_affected();
+        }
+        // A listing joins an existing product with the same identity, or failing
+        // that the same id (a source renamed it); otherwise it is a new product.
+        let observed = |sql| sqlx::query(sql).bind(source.observed_on);
+        observed("INSERT INTO products (id, identity, kind, name, manufacturer, pack_count, pack_unit,
+                                   match_key, salts_label, first_seen, last_seen)
+             SELECT DISTINCT ON (i.id) i.id, i.identity, i.kind, i.name, i.manufacturer, i.pack_count,
+                    i.pack_unit, i.match_key, i.salts_label, $1, $1
+             FROM incoming i
+             WHERE NOT EXISTS (SELECT 1 FROM products p WHERE p.identity = i.identity OR p.id = i.id)
+             ORDER BY i.id").execute(&mut *tx).await.map_err(db)?;
+        sqlx::query(
+            "CREATE TEMP TABLE matched ON COMMIT DROP AS
+             SELECT DISTINCT ON (product_id) product_id, price_paise FROM (
+                 SELECT COALESCE(
+                            (SELECT p.id FROM products p WHERE p.identity = i.identity),
+                            (SELECT p.id FROM products p WHERE p.id = i.id)) AS product_id,
+                        i.price_paise, i.id
+                 FROM incoming i) m
+             WHERE product_id IS NOT NULL
+             ORDER BY product_id, id",
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(db)?;
+        observed(
+            "UPDATE products p SET first_seen = LEAST(p.first_seen, $1),
+                                   last_seen = GREATEST(p.last_seen, $1)
+             FROM matched m WHERE m.product_id = p.id",
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(db)?;
+        let recorded = sqlx::query(
+            "INSERT INTO price_observations (product_id, source_id, observed_on, price_paise)
+             SELECT product_id, $1, $2, price_paise FROM matched
+             ON CONFLICT (product_id, source_id, observed_on)
+             DO UPDATE SET price_paise = EXCLUDED.price_paise, imported_at = now()",
+        )
+        .bind(&source.id)
+        .bind(source.observed_on)
+        .execute(&mut *tx)
+        .await
+        .map_err(db)?
+        .rows_affected();
+        sqlx::query("INSERT INTO import_runs (source_id, observed_on, offers) VALUES ($1, $2, $3)")
+            .bind(&source.id)
+            .bind(source.observed_on)
+            .bind(i64::try_from(recorded).map_err(|_| RepoError("too many offers".into()))?)
+            .execute(&mut *tx)
+            .await
+            .map_err(db)?;
+        // Serve the newest price of every product. DELETE (not TRUNCATE) keeps
+        // the old rows readable by searches until this transaction commits.
+        for step in [
+            "DELETE FROM offers",
+            "INSERT INTO offers (id, source, name, manufacturer, price_paise, pack_count, pack_unit,
+                                 unit_price_millipaise, match_key, salts_label)
+             SELECT DISTINCT ON (p.id) p.id, p.kind, p.name, p.manufacturer, o.price_paise,
+                    p.pack_count, p.pack_unit, o.price_paise * 1000 / p.pack_count,
+                    p.match_key, p.salts_label
+             FROM products p JOIN price_observations o ON o.product_id = p.id
+             ORDER BY p.id, o.observed_on DESC, o.imported_at DESC",
+        ] {
+            sqlx::query(step).execute(&mut *tx).await.map_err(db)?;
         }
         tx.commit().await.map_err(db)?;
-        Ok(inserted)
+        Ok(recorded)
     }
 }
 
@@ -204,6 +282,7 @@ impl OfferRepository for PgOfferRepository {
 mod tests {
     use super::*;
     use nirog_domain::{Form, Release, Salt};
+    use time::{Date, macros::date};
 
     pub(crate) fn offer(
         id: &str,
@@ -236,8 +315,18 @@ mod tests {
         assert_eq!(like_pattern("Dolo"), "%dolo%");
     }
 
+    fn src(id: &str, kind: SourceKind, observed_on: Date) -> SourceInfo {
+        SourceInfo {
+            id: id.into(),
+            kind,
+            title: id.into(),
+            url: None,
+            observed_on,
+        }
+    }
+
     #[sqlx::test(migrator = "crate::MIGRATOR")]
-    async fn replace_search_and_key_lookup(pool: PgPool) -> Result<(), RepoError> {
+    async fn record_search_and_key_lookup(pool: PgPool) -> Result<(), RepoError> {
         let repo = PgOfferRepository::new(pool);
         let ja = offer(
             "ja:1",
@@ -249,16 +338,10 @@ mod tests {
         );
         let dolo = offer("brand:1", SourceKind::Brand, "Dolo 650", 3400, 15, 650);
         let other = offer("brand:2", SourceKind::Brand, "Calpol 500", 2000, 15, 500);
-        assert_eq!(
-            repo.replace_source(SourceKind::JanAushadhi, std::slice::from_ref(&ja))
-                .await?,
-            1
-        );
-        assert_eq!(
-            repo.replace_source(SourceKind::Brand, &[dolo.clone(), other.clone()])
-                .await?,
-            2
-        );
+        let ja_src = src("ja", SourceKind::JanAushadhi, date!(2026 - 11 - 20));
+        let old = src("brands-2022", SourceKind::Brand, date!(2022 - 11 - 17));
+        assert_eq!(repo.record(&ja_src, std::slice::from_ref(&ja)).await?, 1);
+        assert_eq!(repo.record(&old, &[dolo.clone(), other.clone()]).await?, 2);
 
         assert_eq!(repo.search("DOLO", 10).await?, vec![dolo.clone()]);
         assert_eq!(repo.search("paracetamol", 1).await?.len(), 1);
@@ -274,26 +357,45 @@ mod tests {
             vec![ja.clone(), dolo.clone()]
         );
         assert!(repo.key_exists(&other.key).await?);
-
-        // Replacing one source leaves the other alone.
-        assert_eq!(repo.replace_source(SourceKind::Brand, &[]).await?, 0);
-        assert_eq!(repo.by_key(&dolo.key).await?, vec![ja]);
-        assert!(!repo.key_exists(&other.key).await?);
         Ok(())
     }
 
     #[sqlx::test(migrator = "crate::MIGRATOR")]
-    async fn replace_rejects_mixed_sources_and_rolls_back(pool: PgPool) -> Result<(), RepoError> {
+    async fn newest_price_wins_and_products_are_never_dropped(
+        pool: PgPool,
+    ) -> Result<(), RepoError> {
         let repo = PgOfferRepository::new(pool);
+        let old = src("brands-2022", SourceKind::Brand, date!(2022 - 11 - 17));
+        let new = src("onemg-2025", SourceKind::Brand, date!(2025 - 10 - 22));
+        let dolo = offer("brand:1", SourceKind::Brand, "Dolo 650", 3400, 15, 650);
+        let calpol = offer("brand:2", SourceKind::Brand, "Calpol 500", 2000, 15, 500);
+        repo.record(&old, &[dolo.clone(), calpol.clone()]).await?;
+
+        // The 2025 list spells Dolo differently, has a new price and lacks Calpol.
+        let mut dolo_2025 = offer("onemg:9", SourceKind::Brand, "DOLO-650", 3213, 15, 650);
+        dolo_2025.manufacturer = "maker.".into();
+        repo.record(&new, &[dolo_2025]).await?;
+        let mut expected = dolo.clone();
+        expected.price = Paise(3213);
+        assert_eq!(repo.by_key(&dolo.key).await?, vec![expected.clone()]);
+        assert_eq!(repo.by_key(&calpol.key).await?, vec![calpol.clone()]);
+
+        // Re-importing the older list does not bring back its older price.
+        repo.record(&old, std::slice::from_ref(&dolo)).await?;
+        assert_eq!(repo.by_key(&dolo.key).await?, vec![expected]);
+        Ok(())
+    }
+
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn record_rejects_mixed_sources_and_rolls_back(pool: PgPool) -> Result<(), RepoError> {
+        let repo = PgOfferRepository::new(pool);
+        let ja_src = src("ja", SourceKind::JanAushadhi, date!(2026 - 11 - 20));
         let ja = offer("ja:1", SourceKind::JanAushadhi, "P", 1500, 10, 650);
-        repo.replace_source(SourceKind::JanAushadhi, std::slice::from_ref(&ja))
-            .await?;
+        repo.record(&ja_src, std::slice::from_ref(&ja)).await?;
+        let mut cheaper = ja.clone();
+        cheaper.price = Paise(900);
         let wrong = offer("brand:1", SourceKind::Brand, "D", 3400, 15, 650);
-        assert!(
-            repo.replace_source(SourceKind::JanAushadhi, &[wrong])
-                .await
-                .is_err()
-        );
+        assert!(repo.record(&ja_src, &[cheaper, wrong]).await.is_err());
         assert_eq!(repo.by_key(&ja.key).await?, vec![ja]);
         Ok(())
     }

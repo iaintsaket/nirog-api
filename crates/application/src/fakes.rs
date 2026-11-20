@@ -7,14 +7,17 @@ use async_trait::async_trait;
 use nirog_domain::{
     Form, MatchKey, Offer, OfferId, Pack, PackUnit, Paise, Release, Salt, SourceKind,
 };
-use time::{Duration, OffsetDateTime, macros::datetime};
+use time::{
+    Duration, OffsetDateTime,
+    macros::{date, datetime},
+};
 use uuid::Uuid;
 
 use crate::error::{IdentityError, RepoError};
 use crate::model::{Identity, NewSavedMatch, SavedMatch, User, UserId};
 use crate::ports::{
     Clock, IdentityProvider, LoginStateRepository, OfferRepository, PriceSource,
-    SavedMatchRepository, SessionRepository, SourceError, UserRepository,
+    SavedMatchRepository, SessionRepository, SourceError, SourceInfo, UserRepository,
 };
 use crate::security::TokenHash;
 
@@ -94,10 +97,21 @@ impl OfferRepository for FakeOffers {
     async fn key_exists(&self, key: &MatchKey) -> Result<bool, RepoError> {
         Ok(self.0.lock().unwrap().iter().any(|o| &o.key == key))
     }
-    async fn replace_source(&self, source: SourceKind, offers: &[Offer]) -> Result<u64, RepoError> {
+    async fn record(&self, source: &SourceInfo, offers: &[Offer]) -> Result<u64, RepoError> {
         let mut all = self.0.lock().unwrap();
-        all.retain(|o| o.source != source);
-        all.extend_from_slice(offers);
+        for o in offers {
+            if o.source != source.kind {
+                return Err(RepoError(format!(
+                    "offer {} is not from {}",
+                    o.id.0, source.id
+                )));
+            }
+            // Same product seen again: keep its id, take the new price.
+            match all.iter_mut().find(|x| x.identity() == o.identity()) {
+                Some(x) => x.price = o.price,
+                None => all.push(o.clone()),
+            }
+        }
         Ok(offers.len() as u64)
     }
 }
@@ -319,8 +333,14 @@ impl SavedMatchRepository for FakeSaved {
 pub struct FakeSource(pub Result<Vec<Offer>, String>);
 
 impl PriceSource for FakeSource {
-    fn kind(&self) -> SourceKind {
-        SourceKind::JanAushadhi
+    fn info(&self) -> SourceInfo {
+        SourceInfo {
+            id: "fake".into(),
+            kind: SourceKind::JanAushadhi,
+            title: "Fake".into(),
+            url: None,
+            observed_on: date!(2026 - 01 - 01),
+        }
     }
     fn load(&self) -> Result<(Vec<Offer>, usize), SourceError> {
         self.0.clone().map(|o| (o, 2)).map_err(SourceError)
