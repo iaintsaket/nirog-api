@@ -5,8 +5,8 @@ use axum::response::IntoResponse;
 
 use crate::AppState;
 use crate::dto::{
-    BrandAliasDto, CompareParams, ComparisonResponse, ErrorBody, SearchParams, SearchResponse,
-    StatsResponse,
+    BrandAliasDto, CloseParams, CloseResponse, CompareParams, ComparisonResponse, ErrorBody,
+    SearchParams, SearchResponse, StatsResponse,
 };
 use crate::error::ApiError;
 
@@ -46,4 +46,16 @@ pub async fn compare(
     responses((status = 200, body = StatsResponse)))]
 pub async fn stats(State(s): State<AppState>) -> Result<impl IntoResponse, ApiError> {
     Ok(([CACHE], Json(StatsResponse::from(s.stats.stats().await?))))
+}
+
+#[utoipa::path(get, path = "/v1/close", tag = "catalog", params(CloseParams),
+    responses((status = 200, body = CloseResponse), (status = 400, body = ErrorBody)))]
+pub async fn close(
+    State(s): State<AppState>,
+    Query(p): Query<CloseParams>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok((
+        [CACHE],
+        Json(CloseResponse::from(s.close.close(&p.key).await?)),
+    ))
 }

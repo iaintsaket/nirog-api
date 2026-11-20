@@ -13,6 +13,7 @@ use crate::routes;
         routes::catalog::search,
         routes::catalog::compare,
         routes::catalog::stats,
+        routes::catalog::close,
         routes::auth::start,
         routes::auth::callback,
         routes::auth::logout,
@@ -22,7 +23,7 @@ use crate::routes;
         routes::saved::create,
         routes::saved::remove,
     ),
-    components(schemas(ErrorBody, Health, SearchResponse, ComparisonResponse, StatsResponse, UserDto, SavedMatchDto, SaveMatchRequest)),
+    components(schemas(ErrorBody, Health, SearchResponse, ComparisonResponse, StatsResponse, CloseResponse, UserDto, SavedMatchDto, SaveMatchRequest)),
     tags((name = "catalog"), (name = "auth"), (name = "saved"))
 )]
 pub struct ApiDoc;

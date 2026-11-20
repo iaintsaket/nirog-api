@@ -131,3 +131,13 @@ pub trait PriceSource: Send + Sync {
 pub trait StatsRepository: Send + Sync {
     async fn stats(&self) -> Result<crate::model::CatalogStats, RepoError>;
 }
+
+/// Formulas that share a salt with yours, in the same form, release type and pack unit.
+#[async_trait]
+pub trait NearbyOffers: Send + Sync {
+    async fn nearby(
+        &self,
+        key: &MatchKey,
+        limit: u32,
+    ) -> Result<Vec<crate::model::NearbyGroup>, RepoError>;
+}

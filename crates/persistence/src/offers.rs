@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use nirog_application::RepoError;
-use nirog_application::ports::{OfferRepository, SourceInfo};
+use nirog_application::model::NearbyGroup;
+use nirog_application::ports::{NearbyOffers, OfferRepository, SourceInfo};
 use nirog_domain::{MatchKey, Offer, OfferId, Pack, PackUnit, Paise, SourceKind};
 use sqlx::{PgPool, Row, postgres::PgRow};
 
@@ -275,6 +276,62 @@ impl OfferRepository for PgOfferRepository {
         }
         tx.commit().await.map_err(db)?;
         Ok(recorded)
+    }
+}
+
+/// Cheapest offer per formula for formulas sharing a salt with `key` (same form, release, unit).
+const NEARBY: &str = r#"
+SELECT DISTINCT ON (match_key)
+       id, source, name, manufacturer, price_paise, pack_count, pack_unit, match_key, salts_label,
+       count(*) OVER (PARTITION BY match_key) AS n
+FROM offers
+WHERE match_key LIKE $1 ESCAPE '\' AND match_key LIKE $2 ESCAPE '\' AND match_key <> $3
+  AND match_key LIKE ANY($4)
+ORDER BY match_key, unit_price_millipaise, id
+LIMIT $5
+"#;
+
+fn like_escape(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
+}
+
+#[async_trait]
+impl NearbyOffers for PgOfferRepository {
+    async fn nearby(&self, key: &MatchKey, limit: u32) -> Result<Vec<NearbyGroup>, RepoError> {
+        let parts: Vec<&str> = key.as_str().split('|').collect();
+        let [form, release, salts, unit] = parts[..] else {
+            return Ok(vec![]);
+        };
+        let names: Vec<String> = salts
+            .split('+')
+            .filter_map(|t| t.split_once(':'))
+            .flat_map(|(n, _)| {
+                let n = like_escape(n);
+                [format!("%|{n}:%"), format!("%+{n}:%")]
+            })
+            .collect();
+        let rows = sqlx::query(NEARBY)
+            .bind(format!("{}|{}|%", like_escape(form), like_escape(release)))
+            .bind(format!("%|{}", like_escape(unit)))
+            .bind(key.as_str())
+            .bind(&names)
+            .bind(i64::from(limit))
+            .fetch_all(&self.pool)
+            .await
+            .map_err(db)?;
+        rows.iter()
+            .map(|r| {
+                let cheapest = to_offer(r)?;
+                let n: i64 = r.try_get("n").map_err(db)?;
+                Ok(NearbyGroup {
+                    key: cheapest.key.clone(),
+                    cheapest,
+                    offers: u64::try_from(n).unwrap_or(0),
+                })
+            })
+            .collect()
     }
 }
 

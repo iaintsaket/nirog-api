@@ -19,7 +19,9 @@ use axum::extract::DefaultBodyLimit;
 use axum::http::{HeaderName, HeaderValue, Method, StatusCode, header};
 use axum::routing::{delete, get, post};
 use axum::{Router, middleware::from_fn_with_state};
-use nirog_application::services::{AuthService, CatalogService, SavedMatchService, StatsService};
+use nirog_application::services::{
+    AuthService, CatalogService, CloseMatchService, SavedMatchService, StatsService,
+};
 use tower_governor::GovernorLayer;
 use tower_governor::governor::GovernorConfigBuilder;
 use tower_http::cors::CorsLayer;
@@ -63,6 +65,7 @@ pub struct AppState {
     pub auth: AuthService,
     pub saved: SavedMatchService,
     pub stats: StatsService,
+    pub close: CloseMatchService,
     pub config: Arc<HttpConfig>,
 }
 
@@ -106,6 +109,7 @@ pub fn router(state: AppState) -> Router {
         .route("/search", get(routes::catalog::search))
         .route("/compare", get(routes::catalog::compare))
         .route("/stats", get(routes::catalog::stats))
+        .route("/close", get(routes::catalog::close))
         .route("/auth/google/start", get(routes::auth::start))
         .route("/auth/google/callback", get(routes::auth::callback))
         .route("/auth/logout", post(routes::auth::logout))

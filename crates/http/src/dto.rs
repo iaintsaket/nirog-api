@@ -311,3 +311,43 @@ impl From<nirog_application::model::CatalogStats> for StatsResponse {
         }
     }
 }
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct CloseParams {
+    /// Match key of your medicine (from search or compare).
+    pub key: String,
+}
+
+/// Nearby formulas when there is no cheaper exact substitute. These are NOT substitutes.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CloseResponse {
+    pub matches: Vec<CloseMatchDto>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CloseMatchDto {
+    pub key: String,
+    pub salts_label: String,
+    /// How many offers have this formula.
+    pub offers: u64,
+    pub cheapest: OfferDto,
+    /// What differs from your medicine, in plain words, e.g. "Capsaicin 0.025% instead of 0.01%".
+    pub differences: Vec<String>,
+}
+
+impl From<Vec<nirog_application::model::CloseMatch>> for CloseResponse {
+    fn from(v: Vec<nirog_application::model::CloseMatch>) -> Self {
+        Self {
+            matches: v
+                .into_iter()
+                .map(|m| CloseMatchDto {
+                    key: m.group.key.as_str().to_owned(),
+                    salts_label: m.group.cheapest.salts_label.clone(),
+                    offers: m.group.offers,
+                    cheapest: OfferDto::from(&m.group.cheapest),
+                    differences: m.differences.iter().map(ToString::to_string).collect(),
+                })
+                .collect(),
+        }
+    }
+}
