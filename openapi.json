@@ -403,6 +403,27 @@
   },
   "components": {
     "schemas": {
+      "BrandAliasDto": {
+        "type": "object",
+        "required": [
+          "brand",
+          "salts_label",
+          "key"
+        ],
+        "properties": {
+          "brand": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string",
+            "description": "Exact-substitution key of the brand itself; a group with this key is an exact match."
+          },
+          "salts_label": {
+            "type": "string",
+            "description": "The brand's salts and strengths, e.g. \"Aspirin 350mg\"."
+          }
+        }
+      },
       "BuyLinkDto": {
         "type": "object",
         "required": [
@@ -665,6 +686,17 @@
             "items": {
               "$ref": "#/components/schemas/SearchGroupDto"
             }
+          },
+          "same_salt_as": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BrandAliasDto",
+                "description": "Set when the query names a brand we have no price for (e.g. Disprin):\n`groups` then lists medicines with the same salt, exact strength first."
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },

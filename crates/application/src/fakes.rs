@@ -14,9 +14,9 @@ use time::{
 use uuid::Uuid;
 
 use crate::error::{IdentityError, RepoError};
-use crate::model::{Identity, NewSavedMatch, SavedMatch, User, UserId};
+use crate::model::{BrandAlias, Identity, NewSavedMatch, SavedMatch, User, UserId};
 use crate::ports::{
-    Clock, IdentityProvider, LoginStateRepository, OfferRepository, PriceSource,
+    BrandAliases, Clock, IdentityProvider, LoginStateRepository, OfferRepository, PriceSource,
     SavedMatchRepository, SessionRepository, SourceError, SourceInfo, UserRepository,
 };
 use crate::security::TokenHash;
@@ -44,6 +44,20 @@ pub fn offer(id: &str, source: SourceKind, name: &str, price: i64, key_name: &st
         },
         key: key(key_name),
         salts_label: format!("{key_name} 1mg"),
+    }
+}
+
+/// Matches a query whose first word is the brand's first word, case-insensitively.
+#[derive(Debug, Default)]
+pub struct FakeAliases(pub Vec<BrandAlias>);
+
+impl BrandAliases for FakeAliases {
+    fn find(&self, query: &str) -> Option<BrandAlias> {
+        let first = |s: &str| s.split_whitespace().next().unwrap_or("").to_lowercase();
+        self.0
+            .iter()
+            .find(|a| first(&a.brand) == first(query))
+            .cloned()
     }
 }
 

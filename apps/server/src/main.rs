@@ -16,6 +16,7 @@ use nirog_persistence::{
     PgLoginStateRepository, PgOfferRepository, PgSavedMatchRepository, PgSessionRepository,
     PgUserRepository,
 };
+use nirog_sources::aliases::BundledAliases;
 use tracing_subscriber::EnvFilter;
 
 use crate::config::Config;
@@ -43,7 +44,11 @@ async fn main() -> Result<()> {
     let sessions = PgSessionRepository::new(pool.clone());
     let clock: Arc<dyn Clock> = Arc::new(SystemClock);
     let state = AppState {
-        catalog: CatalogService::new(offers.clone(), Arc::new(DefaultSellerLinks)),
+        catalog: CatalogService::new(
+            offers.clone(),
+            Arc::new(DefaultSellerLinks),
+            Arc::new(BundledAliases::bundled()),
+        ),
         auth: AuthService::new(
             Arc::new(PgUserRepository::new(pool.clone())),
             Arc::new(sessions.clone()),

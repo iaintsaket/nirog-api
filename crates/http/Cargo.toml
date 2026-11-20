@@ -24,6 +24,7 @@ uuid.workspace = true
 
 [dev-dependencies]
 nirog-persistence.workspace = true
+nirog-sources.workspace = true
 async-trait.workspace = true
 http-body-util.workspace = true
 serde_json.workspace = true

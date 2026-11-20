@@ -12,6 +12,7 @@ nirog-application.workspace = true
 nirog-http.workspace = true
 nirog-identity-google.workspace = true
 nirog-persistence.workspace = true
+nirog-sources.workspace = true
 anyhow.workspace = true
 axum.workspace = true
 time.workspace = true

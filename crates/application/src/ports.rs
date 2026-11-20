@@ -7,7 +7,7 @@ use time::{Date, OffsetDateTime};
 use uuid::Uuid;
 
 use crate::error::{IdentityError, RepoError};
-use crate::model::{BuyLink, Identity, NewSavedMatch, SavedMatch, User, UserId};
+use crate::model::{BrandAlias, BuyLink, Identity, NewSavedMatch, SavedMatch, User, UserId};
 use crate::security::TokenHash;
 
 #[async_trait]
@@ -90,6 +90,12 @@ impl Clock for SystemClock {
     fn now(&self) -> OffsetDateTime {
         OffsetDateTime::now_utc()
     }
+}
+
+/// Brands missing from the price data, mapped to their salts.
+pub trait BrandAliases: Send + Sync {
+    /// The brand a query names, allowing small typos ("displin" → Disprin).
+    fn find(&self, query: &str) -> Option<BrandAlias>;
 }
 
 /// Where a user can buy an offer.

@@ -20,6 +20,7 @@ use nirog_persistence::{
     PgLoginStateRepository, PgOfferRepository, PgSavedMatchRepository, PgSessionRepository,
     PgUserRepository,
 };
+use nirog_sources::aliases::BundledAliases;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -120,7 +121,11 @@ async fn app_with(pool: PgPool, config: HttpConfig) -> Router {
         .await
         .unwrap();
     let state = AppState {
-        catalog: CatalogService::new(offers.clone(), Arc::new(DefaultSellerLinks)),
+        catalog: CatalogService::new(
+            offers.clone(),
+            Arc::new(DefaultSellerLinks),
+            Arc::new(BundledAliases::bundled()),
+        ),
         auth: AuthService::new(
             Arc::new(PgUserRepository::new(pool.clone())),
             Arc::new(PgSessionRepository::new(pool.clone())),
@@ -273,7 +278,18 @@ async fn search_and_compare_find_the_cheapest(pool: PgPool) {
         send(&app, get("/v1/search?q=a")).await.status,
         StatusCode::BAD_REQUEST
     );
+    // A brand missing from every price list leads to its salt instead.
+    let brand = send(&app, get("/v1/search?q=displin")).await;
+    assert_eq!(
+        brand.json["same_salt_as"]["brand"], "Disprin",
+        "{}",
+        brand.json
+    );
+    assert_eq!(brand.json["same_salt_as"]["salts_label"], "Aspirin 350mg");
+    assert_eq!(brand.json["did_you_mean"].as_array().map(Vec::len), Some(0));
+
     let miss = send(&app, get("/v1/search?q=dollo")).await;
+    assert!(miss.json["same_salt_as"].is_null(), "{}", miss.json);
     assert_eq!(
         miss.json["groups"].as_array().unwrap().len(),
         0,

@@ -22,6 +22,17 @@ pub struct Identity {
     pub name: String,
 }
 
+/// A brand missing from every price list, and what it contains.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BrandAlias {
+    pub brand: String,
+    /// The brand's exact salts, strength and form.
+    pub key: MatchKey,
+    pub salts_label: String,
+    /// What to search instead: the salt names ("Aspirin").
+    pub search: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchGroup {
     pub key: MatchKey,
