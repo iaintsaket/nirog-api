@@ -24,7 +24,7 @@ axum-extra = { version = "0.12", features = ["cookie"] }
 base64 = "0.23"
 time = { version = "0.3", features = ["serde", "formatting", "parsing", "macros"] }
 csv = "1"
-getrandom = "0.3"
+getrandom = "0.4"
 http-body-util = "0.1"
 regex = "1"
 reqwest = { version = "0.13", default-features = false, features = ["json", "form", "rustls"] }
