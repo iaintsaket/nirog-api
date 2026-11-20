@@ -2,7 +2,7 @@
 # Build: docker build -t nirog-api .
 # Runs as a non-root user on a distroless base (no shell, no package manager).
 
-FROM rust:1-bookworm AS build
+FROM rust:1-trixie AS build
 WORKDIR /src
 COPY rust-toolchain.toml ./
 RUN rustup show active-toolchain || rustup toolchain install
@@ -13,7 +13,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
  && mkdir -p /out \
  && cp target/release/nirog-server target/release/nirog-importer /out/
 
-FROM gcr.io/distroless/cc-debian12:nonroot
+FROM gcr.io/distroless/cc-debian13:nonroot
 WORKDIR /app
 COPY --from=build /out/nirog-server /out/nirog-importer /app/
 COPY data/janaushadhi-products.csv /app/data/
