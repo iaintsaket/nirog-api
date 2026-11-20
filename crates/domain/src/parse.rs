@@ -194,6 +194,29 @@ pub fn parse_brand_pack(text: &str) -> Option<Pack> {
     Some(Pack { count: whole_count(c.get(1)?.as_str())?, unit: unit_of(c.get(2)?.as_str()) })
 }
 
+/// Human label for a salt list: "Amoxicillin 500mg + Clavulanic Acid 125mg".
+pub fn describe_salts(salts: &[Salt]) -> String {
+    salts
+        .iter()
+        .map(|s| {
+            let name = s
+                .name
+                .split(' ')
+                .map(|w| {
+                    let mut c = w.chars();
+                    c.next().map_or_else(String::new, |f| f.to_uppercase().chain(c).collect())
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            match &s.strength {
+                Some(st) => format!("{name} {st}"),
+                None => name,
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" + ")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -302,5 +325,12 @@ mod tests {
         assert_eq!(parse_brand_pack("bottle of 100 ml Syrup"), Some(Pack { count: 100, unit: PackUnit::Ml }));
         assert_eq!(parse_brand_pack("tube of 30 gm Gel"), Some(Pack { count: 30, unit: PackUnit::G }));
         assert_eq!(parse_brand_pack("packet"), None);
+    }
+
+    #[test]
+    fn describes_salts_for_display() {
+        let salts = [Salt::mg("amoxicillin", 500_000), Salt::mg("clavulanic acid", 125_000)];
+        assert_eq!(describe_salts(&salts), "Amoxicillin 500mg + Clavulanic Acid 125mg");
+        assert_eq!(describe_salts(&[Salt { name: "x".into(), strength: None }]), "X");
     }
 }
