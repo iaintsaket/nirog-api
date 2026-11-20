@@ -14,6 +14,8 @@ use crate::security::TokenHash;
 pub trait OfferRepository: Send + Sync {
     /// Offers whose name or salts match `query`, best matches first.
     async fn search(&self, query: &str, limit: u32) -> Result<Vec<Offer>, RepoError>;
+    /// Medicine and salt names closest to a query that matched nothing, best first.
+    async fn closest_names(&self, query: &str, limit: u32) -> Result<Vec<String>, RepoError>;
     async fn by_key(&self, key: &MatchKey) -> Result<Vec<Offer>, RepoError>;
     async fn key_exists(&self, key: &MatchKey) -> Result<bool, RepoError>;
     /// Atomically replace every offer from `source` with `offers`.

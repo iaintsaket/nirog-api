@@ -96,6 +96,30 @@ impl OfferRepository for PgOfferRepository {
         rows.iter().map(to_offer).collect()
     }
 
+    async fn closest_names(&self, query: &str, limit: u32) -> Result<Vec<String>, RepoError> {
+        // `<%` is pg_trgm's word-similarity operator: it scores the query against
+        // the best-matching part of a name, so "Tablet" suffixes don't dilute it. Index-served.
+        let sql = "SELECT v FROM (
+                SELECT name AS v, word_similarity($1, lower(name)) AS s FROM offers WHERE $1 <% lower(name)
+                UNION ALL
+                SELECT salts_label, word_similarity($1, lower(salts_label)) FROM offers WHERE $1 <% lower(salts_label)
+             ) t GROUP BY v ORDER BY max(s) DESC, length(v), v LIMIT $2";
+        // The default cutoff (0.6) misses one-letter typos such as "dollo" for "Dolo" (0.57).
+        let mut tx = self.pool.begin().await.map_err(db)?;
+        sqlx::query("SELECT set_config('pg_trgm.word_similarity_threshold', '0.5', true)")
+            .execute(&mut *tx)
+            .await
+            .map_err(db)?;
+        let names = sqlx::query_scalar(sql)
+            .bind(query.to_lowercase())
+            .bind(i64::from(limit))
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(db)?;
+        tx.commit().await.map_err(db)?;
+        Ok(names)
+    }
+
     async fn by_key(&self, key: &MatchKey) -> Result<Vec<Offer>, RepoError> {
         let sql = select_offers!("WHERE match_key = $1 ORDER BY unit_price_millipaise, id");
         let rows = sqlx::query(sql)
@@ -242,6 +266,8 @@ mod tests {
         // Two-letter queries match the start of a name or salt only.
         assert_eq!(repo.search("do", 10).await?, vec![dolo.clone()]);
         assert!(repo.search("ol", 10).await?.is_empty());
+        // Misspellings get the closest names instead.
+        assert_eq!(repo.closest_names("dollo", 5).await?, vec!["Dolo 650"]);
         // Cheapest per unit first: JA 150 paise/tab beats Dolo ~227.
         assert_eq!(
             repo.by_key(&dolo.key).await?,

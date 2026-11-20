@@ -17,7 +17,11 @@ pub async fn search(
     Query(p): Query<SearchParams>,
 ) -> Result<impl IntoResponse, ApiError> {
     let groups = s.catalog.search(&p.q).await?;
-    Ok(([CACHE], Json(SearchResponse::from(groups))))
+    let mut body = SearchResponse::from(groups);
+    if body.groups.is_empty() {
+        body.did_you_mean = s.catalog.closest(&p.q).await?;
+    }
+    Ok(([CACHE], Json(body)))
 }
 
 #[utoipa::path(get, path = "/v1/compare", tag = "catalog", params(CompareParams),

@@ -11,6 +11,7 @@ pub const MAX_QUERY: usize = 100;
 const SEARCH_ROWS: u32 = 200;
 const MAX_GROUPS: usize = 20;
 pub const MAX_COMPARED: usize = 50;
+const MAX_SUGGESTIONS: u32 = 5;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ComparisonView {
@@ -60,6 +61,14 @@ impl CatalogService {
             }
         }
         Ok(groups)
+    }
+
+    /// Up to [`MAX_SUGGESTIONS`] names close to a query that matched nothing.
+    pub async fn closest(&self, query: &str) -> Result<Vec<String>, AppError> {
+        Ok(self
+            .offers
+            .closest_names(query.trim(), MAX_SUGGESTIONS)
+            .await?)
     }
 
     pub async fn compare(
