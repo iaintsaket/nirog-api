@@ -1352,6 +1352,7 @@ dependencies = [
  "csv",
  "nirog-application",
  "nirog-domain",
+ "regex",
  "serde",
  "time",
 ]
