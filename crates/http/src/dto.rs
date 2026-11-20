@@ -97,6 +97,8 @@ pub struct SearchGroupDto {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct SearchResponse {
     pub groups: Vec<SearchGroupDto>,
+    /// When nothing matched: the closest medicine or salt names, best first.
+    pub did_you_mean: Vec<String>,
 }
 
 impl From<Vec<SearchGroup>> for SearchResponse {
@@ -110,6 +112,7 @@ impl From<Vec<SearchGroup>> for SearchResponse {
                     matched: g.matched.iter().map(OfferDto::from).collect(),
                 })
                 .collect(),
+            did_you_mean: Vec::new(),
         }
     }
 }

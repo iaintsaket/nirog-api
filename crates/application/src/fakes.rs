@@ -55,6 +55,20 @@ impl FakeOffers {
 
 #[async_trait]
 impl OfferRepository for FakeOffers {
+    async fn closest_names(&self, query: &str, limit: u32) -> Result<Vec<String>, RepoError> {
+        // Stand-in for trigram similarity: same first three letters.
+        let head: String = query.to_lowercase().chars().take(3).collect();
+        let all = self.0.lock().unwrap();
+        let mut names: Vec<String> = all
+            .iter()
+            .map(|o| o.name.clone())
+            .filter(|n| n.to_lowercase().starts_with(&head))
+            .collect();
+        names.dedup();
+        names.truncate(limit as usize);
+        Ok(names)
+    }
+
     async fn search(&self, query: &str, limit: u32) -> Result<Vec<Offer>, RepoError> {
         let q = query.to_lowercase();
         let all = self.0.lock().unwrap();

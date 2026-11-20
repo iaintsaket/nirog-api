@@ -261,6 +261,20 @@ async fn search_and_compare_find_the_cheapest(pool: PgPool) {
         send(&app, get("/v1/search?q=a")).await.status,
         StatusCode::BAD_REQUEST
     );
+    let miss = send(&app, get("/v1/search?q=dollo")).await;
+    assert_eq!(
+        miss.json["groups"].as_array().unwrap().len(),
+        0,
+        "{}",
+        miss.json
+    );
+    assert!(
+        miss.json["did_you_mean"][0]
+            .as_str()
+            .is_some_and(|n| n.starts_with("Dolo")),
+        "{}",
+        miss.json
+    );
 
     let enc = key
         .replace('|', "%7C")

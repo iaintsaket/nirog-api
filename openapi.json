@@ -649,9 +649,17 @@
       "SearchResponse": {
         "type": "object",
         "required": [
-          "groups"
+          "groups",
+          "did_you_mean"
         ],
         "properties": {
+          "did_you_mean": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "When nothing matched: the closest medicine or salt names, best first."
+          },
           "groups": {
             "type": "array",
             "items": {
