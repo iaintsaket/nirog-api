@@ -14,8 +14,8 @@ use nirog_application::ports::{
 };
 use nirog_application::sellers::DefaultSellerLinks;
 use nirog_application::services::{
-    AuthService, CatalogService, CloseMatchService, PagesService, RecentService, SavedMatchService,
-    StatsService,
+    AuthService, BuyService, CatalogService, CloseMatchService, PagesService, RecentService,
+    SavedMatchService, StatsService,
 };
 use nirog_application::stock::{StockStatus, Vendor, VendorListing};
 use nirog_application::{Identity, IdentityError};
@@ -23,7 +23,7 @@ use nirog_domain::parse::{describe_salts, detect_form, detect_release};
 use nirog_domain::{MatchKey, Offer, OfferId, Pack, PackUnit, Paise, Salt, SourceKind};
 use nirog_http::{AppState, HttpConfig, RateLimit, router};
 use nirog_persistence::{
-    PgLoginStateRepository, PgMedicinePages, PgOfferRepository, PgRecentRepository,
+    PgBuyLinks, PgLoginStateRepository, PgMedicinePages, PgOfferRepository, PgRecentRepository,
     PgSavedMatchRepository, PgSessionRepository, PgStatsRepository, PgUserRepository,
     PgVendorListings,
 };
@@ -137,6 +137,11 @@ async fn app_with(pool: PgPool, config: HttpConfig) -> Router {
         )
         .with_stock(
             Arc::new(PgVendorListings::new(pool.clone())),
+            Arc::new(SystemClock),
+        )
+        .with_sources(Arc::new(PgBuyLinks::new(pool.clone()))),
+        buy: BuyService::new(
+            Arc::new(PgBuyLinks::new(pool.clone())),
             Arc::new(SystemClock),
         ),
         auth: AuthService::new(
@@ -390,6 +395,104 @@ async fn search_and_compare_find_the_cheapest(pool: PgPool) {
     assert_eq!(
         send(&app, get("/v1/compare?key=bad")).await.status,
         StatusCode::BAD_REQUEST
+    );
+}
+
+#[sqlx::test(migrator = "nirog_persistence::MIGRATOR")]
+async fn buy_links_go_through_our_redirect_to_stored_https_pages_only(pool: PgPool) {
+    let app = app_with(pool.clone(), config()).await;
+    // Display names and search pages are stored privately, never in code.
+    sqlx::query(
+        "INSERT INTO price_sources (id, display_name, search_url_template) VALUES
+         ('source_a', 'Pharmacy One', 'https://shop.example/search?q={query}'),
+         ('source_b', 'Pharmacy Two', NULL)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    for bad in [
+        "INSERT INTO price_sources VALUES ('source_x', 'Pharmacy X', NULL)",
+        "INSERT INTO price_sources VALUES ('source_c', 'Pharmacy Three', 'http://shop.example/?q={query}')",
+    ] {
+        assert!(sqlx::query(bad).execute(&pool).await.is_err(), "{bad}");
+    }
+    let listing = |vendor, url: &str| VendorListing {
+        offer_id: OfferId("brand:1".into()),
+        vendor,
+        url: url.into(),
+        status: StockStatus::InStock,
+        price: Paise(2900),
+        checked_at: time::OffsetDateTime::now_utc(),
+    };
+    PgVendorListings::new(pool.clone())
+        .upsert(&[
+            listing(Vendor::SourceB, "https://shop.example/p/dolo-650"),
+            listing(Vendor::SourceD, "http://shop.example/p/dolo-650"),
+        ])
+        .await
+        .unwrap();
+
+    let found = send(&app, get("/v1/search?q=dolo")).await;
+    let key = urlencoding(found.json["groups"][0]["key"].as_str().unwrap());
+    let cmp = send(&app, get(&format!("/v1/compare?key={key}"))).await;
+    let brand = &cmp.json["offers"][1];
+    assert_eq!(brand["offer"]["id"], "brand:1", "{}", cmp.json);
+    assert_eq!(
+        brand["vendors"][0]["display_name"], "Pharmacy Two",
+        "{brand}"
+    );
+    assert_eq!(brand["vendors"][0]["buy_path"], "/v1/go/brand%3A1/source_b");
+    // No stored name and no https page: a placeholder name and no link.
+    assert_eq!(brand["vendors"][1]["display_name"], "Pharmacy D");
+    assert!(brand["vendors"][1]["buy_path"].is_null(), "{brand}");
+    // A source with a search page but no listing: a search link, through our redirect.
+    assert_eq!(
+        brand["links"],
+        serde_json::json!([{"label": "Pharmacy One",
+            "url": "/v1/go/brand%3A1/source_a", "kind": "online"}])
+    );
+    assert_eq!(cmp.json["offers"][0]["links"][0]["kind"], "store");
+    assert_eq!(
+        cmp.json["offers"][0]["links"].as_array().map(Vec::len),
+        Some(2)
+    );
+
+    // Query parameters never choose the destination.
+    let go = send(
+        &app,
+        get("/v1/go/brand%3A1/source_b?url=https://evil.example/&next=https://evil.example/"),
+    )
+    .await;
+    assert_eq!(go.status, StatusCode::FOUND);
+    assert_eq!(go.header("location"), "https://shop.example/p/dolo-650");
+    assert_eq!(go.header("cache-control"), "no-store");
+    assert_eq!(go.header("referrer-policy"), "no-referrer");
+    let search = send(&app, get("/v1/go/brand:1/source_a")).await;
+    assert_eq!(search.status, StatusCode::FOUND);
+    assert_eq!(
+        search.header("location"),
+        "https://shop.example/search?q=Dolo%20650%20Tablet"
+    );
+    // A stored non-https page is refused, as is a source with nothing stored.
+    for (uri, status) in [
+        ("/v1/go/brand:1/source_d", StatusCode::NOT_FOUND),
+        ("/v1/go/brand:1/source_c", StatusCode::NOT_FOUND),
+        ("/v1/go/nope/source_a", StatusCode::NOT_FOUND),
+        ("/v1/go/brand:1/source_x", StatusCode::BAD_REQUEST),
+    ] {
+        let res = send(&app, get(uri)).await;
+        assert_eq!(res.status, status, "{uri}");
+        assert!(res.header("location").is_empty(), "{uri}");
+        assert!(res.json["error"].is_string(), "{uri}");
+    }
+    let clicks: Vec<(String, i64)> =
+        sqlx::query_as("SELECT source_id, clicks FROM buy_clicks ORDER BY source_id")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        clicks,
+        [("source_a".to_owned(), 1), ("source_b".to_owned(), 1)]
     );
 }
 

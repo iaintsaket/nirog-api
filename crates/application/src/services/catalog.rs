@@ -3,9 +3,12 @@ use std::sync::Arc;
 
 use nirog_domain::{Comparison, MatchKey, Offer, OfferId, SourceKind};
 
+use crate::buy::{NoSources, SourceLink, for_offer};
 use crate::error::AppError;
 use crate::model::{BrandAlias, BuyLink, SearchGroup};
-use crate::ports::{BrandAliases, Clock, OfferRepository, SellerLinks, StockSource, SystemClock};
+use crate::ports::{
+    BrandAliases, Clock, OfferRepository, SellerLinks, SourceProfiles, StockSource, SystemClock,
+};
 use crate::stock::{NoStock, VendorStatus, sold_out_everywhere};
 
 pub const MIN_QUERY: usize = 2;
@@ -25,6 +28,8 @@ pub struct ComparisonView {
     pub links: Vec<Vec<BuyLink>>,
     /// Stock at each online pharmacy, index-aligned with `comparison.offers`; empty when unchecked.
     pub stock: Vec<Vec<VendorStatus>>,
+    /// Display name and buy redirect of each `stock` entry, index-aligned with `stock`.
+    pub sources: Vec<Vec<SourceLink>>,
 }
 
 /// Search and compare medicines across every source.
@@ -35,6 +40,7 @@ pub struct CatalogService {
     aliases: Arc<dyn BrandAliases>,
     stock: Arc<dyn StockSource>,
     clock: Arc<dyn Clock>,
+    sources: Arc<dyn SourceProfiles>,
 }
 
 impl std::fmt::Debug for CatalogService {
@@ -55,7 +61,15 @@ impl CatalogService {
             aliases,
             stock: Arc::new(NoStock),
             clock: Arc::new(SystemClock),
+            sources: Arc::new(NoSources),
         }
+    }
+
+    /// Names sources and adds buy redirects from `sources`: each listing gets one, and a brand
+    /// gets a search link at every source with a search page but no listing of it.
+    pub fn with_sources(mut self, sources: Arc<dyn SourceProfiles>) -> Self {
+        self.sources = sources;
+        self
     }
 
     /// Reads online stock from `stock`: compare shows it, and compare and search hide brand
@@ -135,21 +149,28 @@ impl CatalogService {
         let comparison = Comparison::build(offers, searched.as_ref())
             .map_err(|_| AppError::NotFound)?
             .top(MAX_COMPARED);
-        let links = comparison
-            .offers
-            .iter()
-            .map(|o| self.sellers.links(o))
-            .collect();
-        let stock = comparison
-            .offers
-            .iter()
-            .map(|o| stock.get(&o.id).cloned().unwrap_or_default())
-            .collect();
+        let profiles = self.sources.profiles().await?;
+        let n = comparison.offers.len();
+        let (mut links, mut stocks, mut sources) = (
+            Vec::with_capacity(n),
+            Vec::with_capacity(n),
+            Vec::with_capacity(n),
+        );
+        for o in &comparison.offers {
+            let statuses = stock.get(&o.id).cloned().unwrap_or_default();
+            let (entries, search) = for_offer(o, &statuses, &profiles);
+            let mut offer_links = self.sellers.links(o);
+            offer_links.extend(search);
+            links.push(offer_links);
+            stocks.push(statuses);
+            sources.push(entries);
+        }
         Ok(ComparisonView {
             comparison,
             total,
             links,
-            stock,
+            stock: stocks,
+            sources,
         })
     }
 }

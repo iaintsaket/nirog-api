@@ -10,13 +10,13 @@ use anyhow::Result;
 use nirog_application::ports::{Clock, SystemClock};
 use nirog_application::sellers::DefaultSellerLinks;
 use nirog_application::services::{
-    AuthService, CatalogService, CloseMatchService, PagesService, RecentService, SavedMatchService,
-    StatsService,
+    AuthService, BuyService, CatalogService, CloseMatchService, PagesService, RecentService,
+    SavedMatchService, StatsService,
 };
 use nirog_http::AppState;
 use nirog_identity_google::{GoogleConfig, GoogleIdentityProvider, Secret};
 use nirog_persistence::{
-    PgLoginStateRepository, PgMedicinePages, PgOfferRepository, PgRecentRepository,
+    PgBuyLinks, PgLoginStateRepository, PgMedicinePages, PgOfferRepository, PgRecentRepository,
     PgSavedMatchRepository, PgSessionRepository, PgStatsRepository, PgUserRepository,
     PgVendorListings,
 };
@@ -53,7 +53,9 @@ async fn main() -> Result<()> {
             Arc::new(DefaultSellerLinks),
             Arc::new(BundledAliases::bundled()),
         )
-        .with_stock(Arc::new(PgVendorListings::new(pool.clone())), clock.clone()),
+        .with_stock(Arc::new(PgVendorListings::new(pool.clone())), clock.clone())
+        .with_sources(Arc::new(PgBuyLinks::new(pool.clone()))),
+        buy: BuyService::new(Arc::new(PgBuyLinks::new(pool.clone())), clock.clone()),
         auth: AuthService::new(
             Arc::new(PgUserRepository::new(pool.clone())),
             Arc::new(sessions.clone()),

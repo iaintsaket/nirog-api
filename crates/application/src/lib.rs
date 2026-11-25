@@ -3,6 +3,7 @@
 //! Adapters (Postgres, Google, CSV sources, HTTP) implement these traits in
 //! their own crates; the server app wires them together.
 
+pub mod buy;
 pub mod error;
 pub mod model;
 pub mod ports;

@@ -1,6 +1,7 @@
 //! Wire types. Kept separate from domain types so the API contract changes
 //! only on purpose; every type here appears in the OpenAPI document.
 
+use nirog_application::buy::SourceLink;
 use nirog_application::services::catalog::ComparisonView;
 use nirog_application::stock::{StockStatus, VendorStatus};
 use nirog_application::{
@@ -155,6 +156,7 @@ pub enum LinkKindDto {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct BuyLinkDto {
     pub label: String,
+    /// An `https` URL, or a path on this API (`/v1/go/...`) that redirects to an online pharmacy.
     pub url: String,
     pub kind: LinkKindDto,
 }
@@ -166,7 +168,7 @@ impl From<&BuyLink> for BuyLinkDto {
             LinkKind::Online => LinkKindDto::Online,
         };
         Self {
-            label: l.label.to_owned(),
+            label: l.label.clone(),
             url: l.url.clone(),
             kind,
         }
@@ -205,6 +207,11 @@ impl From<StockStatus> for StockStatusDto {
 pub struct VendorStatusDto {
     /// Stable source id, e.g. "source_a".
     pub vendor: String,
+    /// The pharmacy's name.
+    pub display_name: String,
+    /// Path on this API (`/v1/go/...`) that redirects to the pharmacy; absent when there is
+    /// nowhere to send a buyer.
+    pub buy_path: Option<String>,
     pub status: StockStatusDto,
     /// The pharmacy's price per pack, in paise; absent when the listing is too old to trust.
     pub price_paise: Option<i64>,
@@ -213,10 +220,12 @@ pub struct VendorStatusDto {
     pub checked_at: OffsetDateTime,
 }
 
-impl From<&VendorStatus> for VendorStatusDto {
-    fn from(v: &VendorStatus) -> Self {
+impl From<(&VendorStatus, &SourceLink)> for VendorStatusDto {
+    fn from((v, link): (&VendorStatus, &SourceLink)) -> Self {
         Self {
             vendor: v.vendor.as_str().to_owned(),
+            display_name: link.display_name.clone(),
+            buy_path: link.buy_path.clone(),
             status: v.status.into(),
             price_paise: v.price.map(|p| p.0),
             checked_at: v.checked_at,
@@ -255,7 +264,8 @@ impl From<ComparisonView> for ComparisonResponse {
                     vendors: v
                         .stock
                         .get(i)
-                        .map(|s| s.iter().map(VendorStatusDto::from).collect())
+                        .zip(v.sources.get(i))
+                        .map(|(s, l)| s.iter().zip(l).map(VendorStatusDto::from).collect())
                         .unwrap_or_default(),
                 })
                 .collect(),

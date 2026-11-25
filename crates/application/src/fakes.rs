@@ -13,13 +13,16 @@ use time::{
 };
 use uuid::Uuid;
 
+use crate::buy::BuyTarget;
 use crate::error::{IdentityError, RepoError};
 use crate::model::{BrandAlias, Identity, NewSavedMatch, SavedMatch, User, UserId};
 use crate::ports::{
-    BrandAliases, Clock, IdentityProvider, LoginStateRepository, MedicinePages, OfferRepository,
-    PriceSource, SavedMatchRepository, SessionRepository, SourceError, SourceInfo, UserRepository,
+    BrandAliases, BuyRedirects, Clock, IdentityProvider, LoginStateRepository, MedicinePages,
+    OfferRepository, PriceSource, SavedMatchRepository, SessionRepository, SourceError, SourceInfo,
+    UserRepository,
 };
 use crate::security::TokenHash;
+use crate::stock::Vendor;
 
 pub fn key(name: &str) -> MatchKey {
     MatchKey::new(
@@ -402,5 +405,46 @@ impl MedicinePages for FakeOffers {
                 g
             })
             .collect())
+    }
+}
+
+/// One stored target for every offer and source, and the clicks counted.
+#[derive(Debug)]
+pub struct FakeBuy {
+    target: Option<BuyTarget>,
+    fail_count: bool,
+    clicks: Mutex<Vec<(time::Date, Vendor)>>,
+}
+
+impl FakeBuy {
+    pub fn new(target: Option<BuyTarget>, fail_count: bool) -> Self {
+        Self {
+            target,
+            fail_count,
+            clicks: Mutex::default(),
+        }
+    }
+
+    pub fn clicks(&self) -> Vec<(time::Date, Vendor)> {
+        self.clicks.lock().unwrap().clone()
+    }
+}
+
+#[async_trait]
+impl BuyRedirects for FakeBuy {
+    async fn target(
+        &self,
+        _offer: &OfferId,
+        _vendor: Vendor,
+    ) -> Result<Option<BuyTarget>, RepoError> {
+        Ok(self.target.clone())
+    }
+
+    async fn count_click(&self, day: time::Date, vendor: Vendor) -> Result<(), RepoError> {
+        if self.fail_count {
+            return Err(RepoError("count failed".into()));
+        }
+        self.clicks.lock().unwrap().push((day, vendor));
+        Ok(())
     }
 }

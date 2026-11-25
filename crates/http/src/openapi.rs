@@ -15,6 +15,7 @@ use crate::routes;
         routes::catalog::stats,
         routes::catalog::close,
         routes::catalog::pages,
+        routes::buy::go,
         routes::auth::start,
         routes::auth::callback,
         routes::auth::logout,
