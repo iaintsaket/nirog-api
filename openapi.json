@@ -189,6 +189,66 @@
         }
       }
     },
+    "/v1/go/{offer_id}/{source_id}": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Sends a buyer to an online pharmacy: the offer's product page there if one is stored, else\nthe pharmacy's search for the offer's name. Destinations come only from the database, so\nnothing in the request can choose where it goes. Each redirect is counted per source and day.",
+        "operationId": "go",
+        "parameters": [
+          {
+            "name": "offer_id",
+            "in": "path",
+            "description": "Offer id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "source_id",
+            "in": "path",
+            "description": "Source id: source_a, source_b, source_c or source_d",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redirect to the pharmacy",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "The pharmacy's https page"
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/health": {
       "get": {
         "tags": [
@@ -614,7 +674,8 @@
             "type": "string"
           },
           "url": {
-            "type": "string"
+            "type": "string",
+            "description": "An `https` URL, or a path on this API (`/v1/go/...`) that redirects to an online pharmacy."
           }
         }
       },
@@ -1106,14 +1167,26 @@
         "description": "One online pharmacy's listing of an offer.",
         "required": [
           "vendor",
+          "display_name",
           "status",
           "checked_at"
         ],
         "properties": {
+          "buy_path": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Path on this API (`/v1/go/...`) that redirects to the pharmacy; absent when there is\nnowhere to send a buyer."
+          },
           "checked_at": {
             "type": "string",
             "format": "date-time",
             "description": "When the source was last checked."
+          },
+          "display_name": {
+            "type": "string",
+            "description": "The pharmacy's name."
           },
           "price_paise": {
             "type": [

@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod buy;
 pub mod catalog;
 pub mod recent;
 pub mod saved;

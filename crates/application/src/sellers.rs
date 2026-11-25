@@ -16,12 +16,12 @@ impl SellerLinks for DefaultSellerLinks {
         match offer.source {
             SourceKind::JanAushadhi => vec![
                 BuyLink {
-                    label: "Find a Jan Aushadhi Kendra",
+                    label: "Find a Jan Aushadhi Kendra".into(),
                     url: JAN_AUSHADHI_STORES.into(),
                     kind: LinkKind::Store,
                 },
                 BuyLink {
-                    label: "Jan Aushadhi Sugam app",
+                    label: "Jan Aushadhi Sugam app".into(),
                     url: SUGAM_APP.into(),
                     kind: LinkKind::Store,
                 },

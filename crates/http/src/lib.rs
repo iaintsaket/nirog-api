@@ -20,8 +20,8 @@ use axum::http::{HeaderName, HeaderValue, Method, StatusCode, header};
 use axum::routing::{delete, get, post};
 use axum::{Router, middleware::from_fn_with_state};
 use nirog_application::services::{
-    AuthService, CatalogService, CloseMatchService, PagesService, RecentService, SavedMatchService,
-    StatsService,
+    AuthService, BuyService, CatalogService, CloseMatchService, PagesService, RecentService,
+    SavedMatchService, StatsService,
 };
 use tower_governor::GovernorLayer;
 use tower_governor::governor::GovernorConfigBuilder;
@@ -66,6 +66,7 @@ pub struct HttpConfig {
 #[derive(Clone)]
 pub struct AppState {
     pub catalog: CatalogService,
+    pub buy: BuyService,
     pub auth: AuthService,
     pub saved: SavedMatchService,
     pub recent: RecentService,
@@ -121,6 +122,7 @@ pub fn router(state: AppState) -> Router {
             get(routes::catalog::pages).layer(tower_http::compression::CompressionLayer::new()),
         )
         .route("/close", get(routes::catalog::close))
+        .route("/go/{offer_id}/{source_id}", get(routes::buy::go))
         .route("/auth/google/start", get(routes::auth::start))
         .route("/auth/google/callback", get(routes::auth::callback))
         .route("/auth/logout", post(routes::auth::logout))

@@ -103,6 +103,7 @@ fn at(vendor: Vendor, status: StockStatus) -> VendorStatus {
         status,
         price: Some(Paise(1_000)),
         checked_at: time::macros::datetime!(2026-11-25 0:00 UTC),
+        has_page: true,
     }
 }
 

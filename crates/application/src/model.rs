@@ -55,7 +55,7 @@ pub enum LinkKind {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct BuyLink {
-    pub label: &'static str,
+    pub label: String,
     pub url: String,
     pub kind: LinkKind,
 }

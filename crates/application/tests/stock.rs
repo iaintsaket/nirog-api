@@ -62,6 +62,7 @@ fn a_one_area_source_alone_never_hides_a_brand() {
         status,
         price: None,
         checked_at: datetime!(2026-11-25 0:00 UTC),
+        has_page: true,
     };
     let out = StockStatus::OutOfStock;
     assert!(!sold_out_everywhere(&[st(Vendor::SourceA, out)]));

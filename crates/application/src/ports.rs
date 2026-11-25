@@ -7,6 +7,7 @@ use nirog_domain::{MatchKey, Offer, OfferId, SourceKind};
 use time::{Date, OffsetDateTime};
 use uuid::Uuid;
 
+use crate::buy::{BuyTarget, SourceProfile};
 use crate::error::{IdentityError, RepoError};
 use crate::model::{
     BrandAlias, BuyLink, Identity, NewSavedMatch, RecentMedicine, SavedMatch, User, UserId,
@@ -193,4 +194,21 @@ pub trait StockSource: Send + Sync {
         offers: &[OfferId],
         now: OffsetDateTime,
     ) -> Result<HashMap<OfferId, Vec<VendorStatus>>, RepoError>;
+}
+
+/// Price sources' display names and search pages, kept only in the database.
+#[async_trait]
+pub trait SourceProfiles: Send + Sync {
+    /// Every stored source, in source order. Sources without a row are absent.
+    async fn profiles(&self) -> Result<Vec<SourceProfile>, RepoError>;
+}
+
+/// Where `/v1/go` sends a buyer, and how many it sent.
+#[async_trait]
+pub trait BuyRedirects: Send + Sync {
+    /// What is stored for `offer` at `vendor`; `None` when the offer does not exist.
+    async fn target(&self, offer: &OfferId, vendor: Vendor)
+    -> Result<Option<BuyTarget>, RepoError>;
+    /// Adds one click for `vendor` on `day`.
+    async fn count_click(&self, day: Date, vendor: Vendor) -> Result<(), RepoError>;
 }

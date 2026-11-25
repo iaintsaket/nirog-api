@@ -76,12 +76,14 @@ impl PagesService {
                 .collect();
             // Pre-built pages are cached for days: they never carry stock.
             let stock = vec![Vec::new(); comparison.offers.len()];
+            let sources = vec![Vec::new(); comparison.offers.len()];
             pages.push(MedicinePage {
                 view: ComparisonView {
                     comparison,
                     total,
                     links,
                     stock,
+                    sources,
                 },
                 names,
             });

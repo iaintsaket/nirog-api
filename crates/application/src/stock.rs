@@ -97,6 +97,8 @@ pub struct VendorStatus {
     /// `None` when the listing is stale: an old price is not shown as current.
     pub price: Option<Paise>,
     pub checked_at: OffsetDateTime,
+    /// The listing has an `https` product page to send a buyer to.
+    pub has_page: bool,
 }
 
 impl VendorStatus {
@@ -112,6 +114,7 @@ impl VendorStatus {
             },
             price: (!stale).then_some(listing.price),
             checked_at: listing.checked_at,
+            has_page: crate::buy::https(&listing.url).is_some(),
         }
     }
 }

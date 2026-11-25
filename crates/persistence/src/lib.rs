@@ -1,5 +1,6 @@
 //! Postgres adapters for the application ports.
 
+mod buy;
 mod offers;
 mod pages;
 mod recent;
@@ -9,6 +10,7 @@ mod stats;
 mod users;
 mod vendors;
 
+pub use buy::PgBuyLinks;
 pub use offers::PgOfferRepository;
 pub use pages::PgMedicinePages;
 pub use recent::PgRecentRepository;
