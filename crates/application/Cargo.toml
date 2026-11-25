@@ -1,0 +1,26 @@
+[package]
+name = "nirog-application"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+description = "Use cases and the ports (traits) they depend on. Adapters implement the ports."
+
+[dependencies]
+nirog-domain.workspace = true
+async-trait.workspace = true
+base64.workspace = true
+time.workspace = true
+getrandom.workspace = true
+serde.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+url.workspace = true
+
+[lints]
+workspace = true

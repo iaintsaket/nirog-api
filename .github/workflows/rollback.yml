@@ -1,0 +1,53 @@
+# Instant rollback: sends all API traffic to an earlier release's Cloud Run revision. No rebuild.
+# Run from Actions → rollback → Run workflow, and enter a version from the Releases page.
+# Works for the 5 newest releases (older images are cleaned up to stay in the free storage).
+name: rollback
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release to go back to, for example v1.0.0"
+        required: true
+concurrency:
+  group: deploy-api # never overlaps a deploy
+  cancel-in-progress: false
+permissions:
+  contents: write # move the "Latest" badge to the release that is live
+  id-token: write # sign in to Google without a key
+
+jobs:
+  rollback:
+    name: Roll back to ${{ inputs.version }}
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://nirog.pages.dev
+    env:
+      VERSION: ${{ inputs.version }}
+      PROJECT: ${{ vars.GCP_PROJECT }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Send all traffic to ${{ inputs.version }}
+        run: deploy/gcp/rollback.sh "$VERSION"
+      - name: Check the live API
+        run: |
+          deploy/gcp/expect-live-revision.sh "$VERSION"
+          code=$(curl -s -o /dev/null -w '%{http_code}' "https://nirog.pages.dev/v1/search?q=dolo")
+          echo "site search -> $code"
+          [ "$code" = 200 ]
+      - name: Mark ${{ inputs.version }} as the live release on GitHub
+        run: |
+          was=$(gh release view --json tagName --jq .tagName)
+          gh release edit "$VERSION" --latest
+          if [ "$was" != "$VERSION" ]; then
+            body="$(gh release view "$was" --json body --jq .body)"
+            gh release edit "$was" --notes "↩️ Replaced on $(date -u +%F) by a rollback: $VERSION is live.
+
+          $body"
+          fi

@@ -1,0 +1,6 @@
+target
+.git
+.github
+*.csv
+!data/janaushadhi-products.csv
+.env*

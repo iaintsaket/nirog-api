@@ -1,0 +1,103 @@
+# Deploys the API to Cloud Run after CI passes on main, and records it as a release.
+# GitHub builds the image (4 CPUs, with the layer cache CI just filled), pushes it to Artifact Registry,
+# then runs the same script a person would (deploy/gcp/cloud-run.sh); GitHub signs in to Google with
+# Workload Identity Federation (no stored key), set up by deploy/gcp/github-deploy-setup.sh.
+#
+# Every deploy gets a semantic version (v1.0.0, v1.0.1, ...): a Git tag, a GitHub Release listing its
+# PRs, and the Cloud Run revision nirog-api-v1-0-1. A merge bumps the patch number; label the PR
+# "release: minor" or "release: major" to bump those. Roll back from Actions → rollback (instant).
+#
+# Repo variables: GCP_PROJECT, GCP_WIF_PROVIDER, GCP_DEPLOY_SA, WEB_ORIGIN, GOOGLE_CLIENT_ID.
+name: deploy
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+permissions:
+  contents: read
+
+jobs:
+  cloud-run:
+    name: Cloud Run
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write # create the release tag
+      id-token: write # sign in to Google without a key
+    environment:
+      name: production
+      url: https://nirog.pages.dev
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      PROJECT: ${{ vars.GCP_PROJECT }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SHA }}
+          fetch-depth: 0 # tags, for the version number and release notes
+      - name: Pick the version
+        run: |
+          last=$(git tag -l 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
+          if [ -z "$last" ]; then
+            next=v1.0.0
+          else
+            labels=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/pulls" --jq '.[0].labels[].name' 2>/dev/null || true)
+            IFS=. read -r major minor patch <<< "${last#v}"
+            if grep -qx 'release: major' <<< "$labels"; then next="v$((major + 1)).0.0"
+            elif grep -qx 'release: minor' <<< "$labels"; then next="v$major.$((minor + 1)).0"
+            else next="v$major.$minor.$((patch + 1))"; fi
+          fi
+          echo "VERSION=$next" >> "$GITHUB_ENV"
+          echo "PREVIOUS=$last" >> "$GITHUB_ENV"
+          echo "Releasing $next (previous: ${last:-none})"
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Name the image
+        run: echo "IMAGE=asia-southeast1-docker.pkg.dev/$PROJECT/nirog/nirog-api:$VERSION" >> "$GITHUB_ENV"
+      - name: Sign Docker in to Artifact Registry
+        run: gcloud auth configure-docker asia-southeast1-docker.pkg.dev --quiet
+      - uses: docker/setup-buildx-action@v4
+      - name: Build and push the image (reuses CI's cache)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Deploy
+        run: deploy/gcp/cloud-run.sh
+        env:
+          WEB_ORIGIN: ${{ vars.WEB_ORIGIN }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+      - name: Record the release (it is live from here on)
+        run: |
+          notes="Running on Cloud Run as nirog-api-${VERSION//./-}. Roll back from Actions → rollback, or: deploy/gcp/rollback.sh <version>."
+          gh release create "$VERSION" --target "$SHA" --title "$VERSION" --notes "$notes" --generate-notes \
+            ${PREVIOUS:+--notes-start-tag "$PREVIOUS"}
+      - name: Check the live API
+        run: |
+          deploy/gcp/expect-live-revision.sh "$VERSION"
+          for path in /v1/health "/v1/search?q=dolo" /v1/stats; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://nirog.pages.dev$path")
+            echo "site $path -> $code"
+            [ "$code" = 200 ] || exit 1
+          done
+      - name: Flag the release if the live checks failed
+        if: failure() && env.VERSION != ''
+        run: |
+          gh release view "$VERSION" >/dev/null 2>&1 || exit 0
+          body="$(gh release view "$VERSION" --json body --jq .body)"
+          gh release edit "$VERSION" --title "$VERSION (live checks failed)" --notes "⚠️ Live checks failed after this deploy. To go back, run Actions → rollback with ${PREVIOUS:-the previous version}.
+
+          $body"

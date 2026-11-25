@@ -1,0 +1,7 @@
+/target
+.env
+*.profraw
+lcov.info
+/data/private/
+.env.*
+!.env.example

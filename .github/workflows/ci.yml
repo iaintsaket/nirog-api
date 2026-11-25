@@ -1,0 +1,115 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+env:
+  CARGO_TERM_COLOR: always
+  COVERAGE_MIN: 80
+  DATABASE_URL: postgres://nirog:nirog@localhost:5432/nirog
+
+jobs:
+  lint:
+    name: fmt + clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Clippy (warnings are errors)
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - name: Budget guard rule
+        working-directory: deploy/gcp/budget-guard
+        run: python3 -m unittest
+
+  test:
+    name: tests + coverage (Postgres 17)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: nirog
+          POSTGRES_PASSWORD: nirog
+          POSTGRES_DB: nirog
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U nirog" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - name: Migrations apply on a fresh database (via the importer)
+        run: cargo run --locked -p nirog-importer
+      - name: Tests with coverage gate (includes the OpenAPI drift test)
+        run: cargo llvm-cov --workspace --all-features --locked --fail-under-lines "$COVERAGE_MIN"
+      - name: openapi.json is committed and current
+        run: git diff --exit-code openapi.json
+
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories licenses bans sources
+
+  secrets:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Scan full history for secrets
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            git /repo --redact --verbose --exit-code 1
+
+  image:
+    name: docker build + trivy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: nirog-api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Trivy (fail on HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: nirog-api:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+  ci:
+    name: ci
+    if: always()
+    needs: [lint, test, deny, secrets, image]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All checks passed
+        run: |
+          echo '${{ toJSON(needs) }}' | jq -e 'to_entries | all(.value.result == "success")'

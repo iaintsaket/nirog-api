@@ -1,0 +1,1148 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Nirog API",
+    "description": "Find cheaper exact substitutes for Indian medicines.",
+    "license": {
+      "name": "MIT",
+      "identifier": "MIT"
+    },
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/v1/auth/google/callback": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Google redirects here. On success sets the session cookie and returns to the website.",
+        "operationId": "callback",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "Back to the website, signed in or with ?error="
+          }
+        }
+      }
+    },
+    "/v1/auth/google/start": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Starts Google sign-in. Binds the OAuth `state` to this browser with a short-lived cookie.",
+        "operationId": "start",
+        "responses": {
+          "303": {
+            "description": "Redirect to Google"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "logout",
+        "responses": {
+          "204": {},
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/close": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "operationId": "close",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "query",
+            "description": "Match key of your medicine (from search or compare).",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloseResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/compare": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "operationId": "compare",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "query",
+            "description": "Match key from a search group.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "searched",
+            "in": "query",
+            "description": "Offer id the user searched for, to compute the saving against it.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComparisonResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/health": {
+      "get": {
+        "tags": [
+          "routes"
+        ],
+        "summary": "Liveness check. Exempt from the proxy secret so the platform can probe it.",
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "me",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Deletes the account, its sessions and saved matches (DPDP right to erasure).",
+        "operationId": "delete_me",
+        "responses": {
+          "204": {},
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/recent": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Records that the user opened a medicine; it moves to the top of `recent` on `/v1/me`.",
+        "operationId": "record",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveMatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Clears the user's recently opened medicines.",
+        "operationId": "clear",
+        "responses": {
+          "204": {},
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/pages": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Every medicine with a substitute, in batches of 500, for building the website's medicine\npages. Called a few dozen times per website deploy, never by browsers. With a pages token\nconfigured it answers only `Authorization: Bearer <token>`, and it is never shared-cached.",
+        "operationId": "pages",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "description": "The `next` value from the previous batch; omit for the first.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/saved": {
+      "get": {
+        "tags": [
+          "saved"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SavedMatchDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "saved"
+        ],
+        "summary": "Saves a match; saving the same key again updates its label.",
+        "operationId": "create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveMatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedMatchDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/saved/{id}": {
+      "delete": {
+        "tags": [
+          "saved"
+        ],
+        "operationId": "remove",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/search": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "operationId": "search",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Medicine or salt name, 2 to 100 characters.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/stats": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "operationId": "stats",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BrandAliasDto": {
+        "type": "object",
+        "required": [
+          "brand",
+          "salts_label",
+          "key"
+        ],
+        "properties": {
+          "brand": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string",
+            "description": "Exact-substitution key of the brand itself; a group with this key is an exact match."
+          },
+          "salts_label": {
+            "type": "string",
+            "description": "The brand's salts and strengths, e.g. \"Aspirin 350mg\"."
+          }
+        }
+      },
+      "BuyLinkDto": {
+        "type": "object",
+        "required": [
+          "label",
+          "url",
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/LinkKindDto"
+          },
+          "label": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      },
+      "CloseMatchDto": {
+        "type": "object",
+        "required": [
+          "key",
+          "salts_label",
+          "offers",
+          "cheapest",
+          "differences"
+        ],
+        "properties": {
+          "cheapest": {
+            "$ref": "#/components/schemas/OfferDto"
+          },
+          "differences": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What differs from your medicine, in plain words, e.g. \"Capsaicin 0.025% instead of 0.01%\"."
+          },
+          "key": {
+            "type": "string"
+          },
+          "offers": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How many offers have this formula.",
+            "minimum": 0
+          },
+          "salts_label": {
+            "type": "string"
+          }
+        }
+      },
+      "CloseResponse": {
+        "type": "object",
+        "description": "Nearby formulas when there is no cheaper exact substitute. These are NOT substitutes.",
+        "required": [
+          "matches"
+        ],
+        "properties": {
+          "matches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CloseMatchDto"
+            }
+          }
+        }
+      },
+      "ComparedOffer": {
+        "type": "object",
+        "required": [
+          "offer",
+          "links",
+          "vendors"
+        ],
+        "properties": {
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BuyLinkDto"
+            }
+          },
+          "offer": {
+            "$ref": "#/components/schemas/OfferDto"
+          },
+          "vendors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VendorStatusDto"
+            },
+            "description": "Stock at each online pharmacy, as last checked; empty when no pharmacy was checked."
+          }
+        }
+      },
+      "ComparisonResponse": {
+        "type": "object",
+        "required": [
+          "key",
+          "offers",
+          "total_offers",
+          "saving_per_pack_paise",
+          "saving_bps"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "offers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComparedOffer"
+            },
+            "description": "Cheapest per unit first: the 50 cheapest, plus the searched offer if it ranks lower."
+          },
+          "saving_bps": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Saving in basis points (1/100 of a percent)."
+          },
+          "saving_per_pack_paise": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Saving per pack of the searched (or costliest) offer when buying the cheapest, in paise."
+          },
+          "searched_index": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Index into `offers` of the medicine the user searched for, if known.",
+            "minimum": 0
+          },
+          "total_offers": {
+            "type": "integer",
+            "description": "Number of exact substitutes in the catalogue.",
+            "minimum": 0
+          }
+        }
+      },
+      "ErrorBody": {
+        "type": "object",
+        "required": [
+          "error",
+          "message"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Stable machine-readable code: `not_found`, `unauthorized`, `invalid`, `limit`, `forbidden`, ..."
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "Health": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "LinkKindDto": {
+        "type": "string",
+        "enum": [
+          "store",
+          "online"
+        ]
+      },
+      "MedicinePageDto": {
+        "type": "object",
+        "description": "One medicine (exact-substitution key) as the website's pre-built page shows it.",
+        "required": [
+          "comparison",
+          "names"
+        ],
+        "properties": {
+          "comparison": {
+            "$ref": "#/components/schemas/ComparisonResponse",
+            "description": "The cheapest 20 offers; the saving is against the costliest of all of them."
+          },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Distinct names of every offer with this key, cheapest first (at most 1,000)."
+          }
+        }
+      },
+      "OfferDto": {
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "name",
+          "manufacturer",
+          "price_paise",
+          "pack_count",
+          "pack_unit",
+          "unit_price_millipaise",
+          "salts_label"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "manufacturer": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pack_count": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "pack_unit": {
+            "$ref": "#/components/schemas/Unit"
+          },
+          "price_paise": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Pack price (MRP) in paise."
+          },
+          "salts_label": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "unit_price_millipaise": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Price of one unit (tablet, ml or g) in thousandths of a paisa."
+          }
+        }
+      },
+      "PagesResponse": {
+        "type": "object",
+        "required": [
+          "pages"
+        ],
+        "properties": {
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass as `after` to get the next batch; absent when this was the last."
+          },
+          "pages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MedicinePageDto"
+            },
+            "description": "Medicines with at least one exact substitute, in match-key order."
+          }
+        }
+      },
+      "RecentDto": {
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "opened_at"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "offer_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "opened_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SaveMatchRequest": {
+        "type": "object",
+        "required": [
+          "key",
+          "label"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string",
+            "description": "1 to 120 characters."
+          },
+          "offer_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The offer the user was looking at when saving, if any."
+          }
+        },
+        "additionalProperties": false
+      },
+      "SavedMatchDto": {
+        "type": "object",
+        "required": [
+          "id",
+          "key",
+          "label",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "offer_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "SearchGroupDto": {
+        "type": "object",
+        "required": [
+          "key",
+          "salts_label",
+          "matched"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Exact-substitution key; pass it to `/v1/compare`."
+          },
+          "matched": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OfferDto"
+            }
+          },
+          "salts_label": {
+            "type": "string"
+          }
+        }
+      },
+      "SearchResponse": {
+        "type": "object",
+        "required": [
+          "groups",
+          "did_you_mean"
+        ],
+        "properties": {
+          "did_you_mean": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "When nothing matched: the closest medicine or salt names, best first."
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchGroupDto"
+            }
+          },
+          "same_salt_as": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BrandAliasDto",
+                "description": "Set when the query names a brand we have no price for (e.g. Disprin):\n`groups` then lists medicines with the same salt, exact strength first."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "Source": {
+        "type": "string",
+        "enum": [
+          "jan_aushadhi",
+          "brand"
+        ]
+      },
+      "StatsResponse": {
+        "type": "object",
+        "description": "Headline figures about the price data, for the home screen.",
+        "required": [
+          "medicines",
+          "jan_aushadhi",
+          "with_cheaper_substitute",
+          "median_saving_bps"
+        ],
+        "properties": {
+          "jan_aushadhi": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "median_saving_bps": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Median saving per unit for those medicines, in basis points (5147 = 51.47%).",
+            "minimum": 0
+          },
+          "medicines": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Every medicine we hold a price for.",
+            "minimum": 0
+          },
+          "prices_updated_on": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Date of the newest price list, YYYY-MM-DD."
+          },
+          "with_cheaper_substitute": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Medicines with an exact substitute that costs less per unit.",
+            "minimum": 0
+          }
+        }
+      },
+      "StockStatusDto": {
+        "type": "string",
+        "enum": [
+          "in_stock",
+          "out_of_stock",
+          "unknown"
+        ]
+      },
+      "Unit": {
+        "type": "string",
+        "enum": [
+          "unit",
+          "ml",
+          "g"
+        ]
+      },
+      "UserDto": {
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "name",
+          "recent"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "picture_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Google profile picture (`https://` on Google's image host), when the account has one."
+          },
+          "recent": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecentDto"
+            },
+            "description": "The last medicines this user opened, newest first (at most 3)."
+          }
+        }
+      },
+      "VendorStatusDto": {
+        "type": "object",
+        "description": "One online pharmacy's listing of an offer.",
+        "required": [
+          "vendor",
+          "status",
+          "checked_at"
+        ],
+        "properties": {
+          "checked_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the source was last checked."
+          },
+          "price_paise": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The pharmacy's price per pack, in paise; absent when the listing is too old to trust."
+          },
+          "status": {
+            "$ref": "#/components/schemas/StockStatusDto"
+          },
+          "vendor": {
+            "type": "string",
+            "description": "Stable source id, e.g. \"source_a\"."
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "catalog"
+    },
+    {
+      "name": "auth"
+    },
+    {
+      "name": "saved"
+    }
+  ]
+}
